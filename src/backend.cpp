@@ -96,6 +96,12 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     connect(&m_wordCountTimer, &QTimer::timeout, this, &Backend::refreshWordCount);
     m_recoveryTimer.setSingleShot(true);
     m_recoveryTimer.setInterval(750);
+    m_autosaveTimer.setSingleShot(true);
+    m_autosaveTimer.setInterval(1000);
+    connect(&m_autosaveTimer, &QTimer::timeout, this, [this]() {
+        if (m_modified && autosaveActive())
+            saveTo(m_fileUrl);
+    });
     connect(&m_recoveryTimer, &QTimer::timeout, this, &Backend::writeRecovery);
     connect(&m_fileWatcher, &QFileSystemWatcher::fileChanged, this,
             [this](const QString &path) {
@@ -241,6 +247,69 @@ void Backend::saveForClose() {
     save();
 }
 
+bool Backend::saveNow() {
+    if (!m_fileUrl.isLocalFile())
+        return false;
+    if (m_modified)
+        saveTo(m_fileUrl);
+    return !m_modified;
+}
+
+void Backend::openPath(const QString &path) {
+    open(QUrl::fromLocalFile(path));
+}
+
+bool Backend::isNotePath(const QString &path) const {
+    if (m_notesDir.isEmpty() || path.isEmpty())
+        return false;
+    const QString dir = QFileInfo(path).absolutePath();
+    return dir == m_notesDir;
+}
+
+bool Backend::autosaveActive() const {
+    return m_fileUrl.isLocalFile() && isNotePath(m_fileUrl.toLocalFile());
+}
+
+QString Backend::filePath() const {
+    return m_fileUrl.isLocalFile() ? m_fileUrl.toLocalFile() : QString();
+}
+
+QString Backend::defaultNotesDir() {
+    const QString documents =
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    return QDir(documents.isEmpty() ? QDir::homePath() : documents)
+        .filePath(QStringLiteral("notes"));
+}
+
+void Backend::setNotesDir(const QString &dir) {
+    const QString absolute = QDir(dir).absolutePath();
+    if (absolute == m_notesDir)
+        return;
+    m_notesDir = absolute;
+    emit notesDirChanged();
+    emit fileUrlChanged();
+}
+
+QVariant Backend::setting(const QString &key, const QVariant &fallback) const {
+    return QSettings().value(key, fallback);
+}
+
+void Backend::setSetting(const QString &key, const QVariant &value) {
+    QSettings().setValue(key, value);
+}
+
+void Backend::newDocument() {
+    m_autosaveTimer.stop();
+    clearRecovery();
+    loadDocumentText(QString());
+    m_lastKnownFileContents.clear();
+    m_hasKnownFileContents = false;
+    setFileUrl(QUrl());
+    watchCurrentFile();
+    setModified(false);
+    setStatus(QString());
+}
+
 void Backend::saveAsDialog() {
     emit saveDialogRequested(suggestedSaveUrl());
 }
@@ -358,6 +427,8 @@ bool Backend::editorTextChanged() {
     setModified(true);
     setStatus(QStringLiteral("Unsaved"));
     scheduleRecovery();
+    if (autosaveActive())
+        m_autosaveTimer.start();
     return true;
 }
 
@@ -507,7 +578,9 @@ void Backend::saveTo(const QUrl &url) {
     setModified(false);
     setStatus(QStringLiteral("Saved %1").arg(fileName()));
     clearRecovery();
+    m_autosaveTimer.stop();
     emit saveSucceeded();
+    emit fileSaved(url.toLocalFile());
 
     if (shouldClose)
         emit closeAfterSave();

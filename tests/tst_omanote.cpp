@@ -4,9 +4,13 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickStyle>
+#include <QQuickTextDocument>
+#include <QSignalSpy>
+#include <QTemporaryDir>
 
 #include "backend.h"
 #include "markdownhighlighter.h"
+#include "notesmodel.h"
 
 class OmanoteTest : public QObject {
     Q_OBJECT
@@ -18,6 +22,126 @@ private slots:
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
                            m_settingsDirectory.path());
+    }
+
+    void extractsNoteTitlesAndPreviews() {
+        QCOMPARE(NotesModel::titleFor(QStringLiteral("# Groceries\n\n- milk"), QStringLiteral("a.md")),
+                 QStringLiteral("Groceries"));
+        QCOMPARE(NotesModel::previewFor(QStringLiteral("# Groceries\n\n- **milk**\n- eggs")),
+                 QStringLiteral("milk"));
+        QCOMPARE(NotesModel::titleFor(QStringLiteral("\n\n  \n"), QStringLiteral("Untitled 2.md")),
+                 QStringLiteral("Untitled 2"));
+        QCOMPARE(NotesModel::previewFor(QStringLiteral("Only a title")), QString());
+        QCOMPARE(NotesModel::stripMarkdown(QStringLiteral("> see [docs](http://x) `now`")),
+                 QStringLiteral("see docs now"));
+    }
+
+    void formatsDates() {
+        const QDateTime now(QDate(2026, 9, 4), QTime(12, 0));
+        QCOMPARE(NotesModel::dateLabel(QDateTime(QDate(2026, 9, 4), QTime(9, 0)), now),
+                 QStringLiteral("Sep 4"));
+        QCOMPARE(NotesModel::dateLabel(QDateTime(QDate(2025, 12, 25), QTime(9, 0)), now),
+                 QStringLiteral("Dec 25, 2025"));
+    }
+
+    void listsSortsFiltersAndPinsNotes() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        auto write = [&dir](const QString &name, const QString &text) {
+            QFile file(dir.filePath(name));
+            QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
+            file.write(text.toUtf8());
+        };
+        write(QStringLiteral("old.md"), QStringLiteral("# Old note\nabout cats"));
+        {
+            QFile old(dir.filePath(QStringLiteral("old.md")));
+            QVERIFY(old.open(QIODevice::ReadWrite));
+            QVERIFY(old.setFileTime(QDateTime::currentDateTime().addDays(-2),
+                                    QFileDevice::FileModificationTime));
+        }
+        write(QStringLiteral("new.md"), QStringLiteral("# New note\nabout dogs"));
+        write(QStringLiteral("ignored.txt"), QStringLiteral("not markdown"));
+
+        NotesModel model;
+        model.setNotesDir(dir.path());
+        QCOMPARE(model.rowCount(), 2);
+        QCOMPARE(model.data(model.index(0), NotesModel::TitleRole).toString(),
+                 QStringLiteral("New note"));
+        QCOMPARE(model.data(model.index(1), NotesModel::TitleRole).toString(),
+                 QStringLiteral("Old note"));
+
+        model.setPinned(dir.filePath(QStringLiteral("old.md")), true);
+        QCOMPARE(model.data(model.index(0), NotesModel::TitleRole).toString(),
+                 QStringLiteral("Old note"));
+        QVERIFY(model.data(model.index(0), NotesModel::PinnedRole).toBool());
+
+        NotesModel reloaded;
+        reloaded.setNotesDir(dir.path());
+        QVERIFY(reloaded.isPinned(dir.filePath(QStringLiteral("old.md"))));
+
+        model.setFilter(QStringLiteral("dogs"));
+        QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(model.pathAt(0), dir.filePath(QStringLiteral("new.md")));
+        model.setFilter(QString());
+        QCOMPARE(model.rowCount(), 2);
+    }
+
+    void createsRenamesAndRemovesNotes() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        NotesModel model;
+        model.setNotesDir(dir.path());
+
+        const QString first = model.createNote();
+        QCOMPARE(QFileInfo(first).fileName(), QStringLiteral("Untitled.md"));
+        const QString second = model.createNote();
+        QCOMPARE(QFileInfo(second).fileName(), QStringLiteral("Untitled 2.md"));
+        QCOMPARE(model.totalCount(), 2);
+
+        QVERIFY(model.renameNote(second, QStringLiteral("ideas")));
+        QVERIFY(QFileInfo::exists(dir.filePath(QStringLiteral("ideas.md"))));
+        QVERIFY(!model.renameNote(first, QStringLiteral("ideas.md")));
+
+        QSignalSpy removed(&model, &NotesModel::noteRemoved);
+        QVERIFY(model.removeNote(first));
+        QCOMPARE(removed.count(), 1);
+        QVERIFY(!QFileInfo::exists(first));
+        QCOMPARE(model.totalCount(), 1);
+    }
+
+    void autosavesNotesInsideTheNotesFolder() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        Backend backend;
+        backend.setNotesDir(dir.path());
+
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData("import QtQuick\nTextEdit {}", QUrl());
+        QScopedPointer<QObject> edit(component.create());
+        QVERIFY2(edit, qPrintable(component.errorString()));
+        QObject *quickDocument = edit->property("textDocument").value<QObject *>();
+        QVERIFY(quickDocument);
+        backend.attachDocument(quickDocument);
+        auto *document = static_cast<QQuickTextDocument *>(quickDocument)->textDocument();
+
+        QVERIFY(backend.isNotePath(dir.filePath(QStringLiteral("x.md"))));
+        QVERIFY(!backend.isNotePath(QStringLiteral("/tmp/elsewhere.md")));
+
+        const QString path = dir.filePath(QStringLiteral("note.md"));
+        { QFile f(path); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("# Hi\n"); }
+        backend.open(QUrl::fromLocalFile(path));
+        QVERIFY(backend.autosaveActive());
+
+        QSignalSpy saved(&backend, &Backend::fileSaved);
+        document->setPlainText(QStringLiteral("# Hi\nchanged"));
+        QVERIFY(backend.editorTextChanged());
+        QVERIFY(backend.modified());
+        QVERIFY(saved.wait(3000));
+        QVERIFY(!backend.modified());
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(f.readAll()), QStringLiteral("# Hi\nchanged"));
     }
 
     void countsWords() {

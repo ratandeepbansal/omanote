@@ -11,6 +11,9 @@
 #include <QFile>
 
 #include "backend.h"
+#include "notesmodel.h"
+#include <QCommandLineParser>
+#include <QSettings>
 #include "systemtheme.h"
 
 int main(int argc, char *argv[]) {
@@ -28,7 +31,32 @@ int main(int argc, char *argv[]) {
 
     QQuickStyle::setStyle(QStringLiteral("Material"));
 
+    QCommandLineParser parser;
+    parser.setApplicationDescription(QStringLiteral("Markdown notes with a sidebar"));
+    parser.addHelpOption();
+    parser.addPositionalArgument(QStringLiteral("file"), QStringLiteral("Markdown file to open"));
+    const QCommandLineOption notesDirOption(
+        QStringLiteral("notes-dir"), QStringLiteral("Folder that holds the notes"),
+        QStringLiteral("dir"));
+    parser.addOption(notesDirOption);
+    parser.process(app);
+
     Backend backend(&app);
+    NotesModel notesModel(&app);
+    {
+        QSettings settings;
+        QString notesDir = parser.value(notesDirOption);
+        if (notesDir.isEmpty())
+            notesDir = settings.value(QStringLiteral("notes/folder")).toString();
+        if (notesDir.isEmpty())
+            notesDir = Backend::defaultNotesDir();
+        if (!settings.contains(QStringLiteral("notes/folder")))
+            settings.setValue(QStringLiteral("notes/folder"), notesDir);
+        backend.setNotesDir(notesDir);
+        notesModel.setNotesDir(notesDir);
+    }
+    QObject::connect(&backend, &Backend::fileSaved, &notesModel,
+                     [&notesModel](const QString &) { notesModel.refresh(); });
     SystemTheme systemTheme(&app);
     backend.setDarkMode(systemTheme.darkMode());
     QObject::connect(&systemTheme, &SystemTheme::darkModeChanged, &backend,
@@ -61,6 +89,7 @@ int main(int argc, char *argv[]) {
             qWarning().noquote() << warning.toString();
     });
     engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+    engine.rootContext()->setContextProperty(QStringLiteral("notesModel"), &notesModel);
 
     engine.load(QUrl(QStringLiteral("qrc:/Main.qml")));
     if (engine.rootObjects().isEmpty()) {
@@ -71,9 +100,15 @@ int main(int argc, char *argv[]) {
 
     backend.setParentWindow(qobject_cast<QWindow *>(engine.rootObjects().constFirst()));
 
-    const QStringList args = app.arguments();
-    if (args.size() > 1 && !backend.modified())
-        backend.open(QUrl::fromLocalFile(args.at(1)));
+    const QStringList args = parser.positionalArguments();
+    if (!args.isEmpty() && !backend.modified()) {
+        backend.open(QUrl::fromLocalFile(args.at(0)));
+    } else if (!backend.modified() && !backend.fileUrl().isValid()) {
+        // Land on the most recent note so the app opens into the library.
+        const QString first = notesModel.pathAt(0);
+        if (!first.isEmpty())
+            backend.open(QUrl::fromLocalFile(first));
+    }
 
     return app.exec();
 }

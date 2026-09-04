@@ -1,6 +1,6 @@
 # Omanote — Product Requirements Document
 
-**Status:** Draft v1 · **Date:** 2026-09-04 · **Owner:** Ratandeep Bansal
+**Status:** v1 implemented (2026-09-04) · **Date:** 2026-09-04 · **Owner:** Ratandeep Bansal
 
 ## 1. Summary
 

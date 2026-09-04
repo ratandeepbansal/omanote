@@ -1,4 +1,24 @@
-# Omawrite
+# Omanote
+
+A fork of [Omawrite](https://github.com/omacom-io/omawrite) that adds a collapsible notes sidebar, in the
+spirit of Apple Notes. Notes are plain Markdown files in `~/Documents/notes` (change with
+`--notes-dir` or the `notes/folder` key in `~/.config/Omacom/omanote.conf`). Notes autosave; files opened
+from elsewhere with Ctrl+O keep Omawrite's explicit-save behaviour. Everything follows the system
+dark/light theme exactly as Omawrite does.
+
+## Notes shortcuts
+
+- `Ctrl+N` creates a new note. `Ctrl+Shift+N` opens a new window.
+- `Ctrl+\` toggles the sidebar. Drag its edge to resize, or drag it closed.
+- `Ctrl+Shift+F` searches notes by title and body.
+- `Ctrl+Alt+Up` / `Ctrl+Alt+Down` move to the previous / next note.
+- `Ctrl+Shift+P` pins or unpins the current note.
+- `Delete` on a selected row, or right-click, moves a note to the trash after confirmation.
+- Right-click also offers Pin, Rename file, and Show in folder.
+
+## Omawrite
+
+The original Omawrite README follows.
 
 A dead-simple Markdown writing app built with Qt Quick and C++ that automatically follows system dark/light mode.
 
@@ -8,7 +28,7 @@ A dead-simple Markdown writing app built with Qt Quick and C++ that automaticall
 
 ## Install
 
-Install via the Omarchy Package Repository via the `omawrite` package. It's installed by default in new installations of Omarchy (from Quattro forward).
+Run `./bin/install` to build and install the `omanote` Arch package, or `./bin/build` for a local binary in `build/`.
 
 ## Shortcuts
 
@@ -16,7 +36,7 @@ Install via the Omarchy Package Repository via the `omawrite` package. It's inst
 - `Ctrl+Shift+S` saves as.
 - `Ctrl+O` opens a Markdown file through the portal picker.
 - `Ctrl+P` opens the system print dialog.
-- `Ctrl+N` opens a new Omawrite window.
+- `Ctrl+Shift+N` opens a new window.
 - `Ctrl+Z`, `Ctrl+Shift+Z`, and `Ctrl+Y` handle undo and redo.
 - `Super+F` toggles fullscreen. Qt maps this key as `Meta+F`.
 - `Ctrl+F` searches the document. Use `Enter` or `Ctrl+G` for the next match and `Shift+Enter` for the previous match.

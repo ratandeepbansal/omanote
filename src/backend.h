@@ -28,6 +28,9 @@ class Backend : public QObject {
     Q_PROPERTY(QString themeForeground READ themeForeground NOTIFY themeColorsChanged)
     Q_PROPERTY(QString themeAccent READ themeAccent NOTIFY themeColorsChanged)
     Q_PROPERTY(QString themeSelection READ themeSelection NOTIFY themeColorsChanged)
+    Q_PROPERTY(QString notesDir READ notesDir NOTIFY notesDirChanged)
+    Q_PROPERTY(QString filePath READ filePath NOTIFY fileUrlChanged)
+    Q_PROPERTY(bool autosaveActive READ autosaveActive NOTIFY fileUrlChanged)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -49,6 +52,13 @@ public:
     QString themeForeground() const { return m_themeForeground; }
     QString themeAccent() const { return m_themeAccent; }
     QString themeSelection() const { return m_themeSelection; }
+    QString notesDir() const { return m_notesDir; }
+    void setNotesDir(const QString &dir);
+    QString filePath() const;
+    // Autosave applies only to files inside the notes folder; anything opened
+    // with Ctrl+O from elsewhere keeps omawrite's explicit-save behaviour.
+    bool autosaveActive() const;
+    static QString defaultNotesDir();
     static int countWords(const QString &text);
     static QString normalizedLinkUrl(const QString &clipboardText);
     static QString suggestedFileName(const QString &text);
@@ -58,6 +68,11 @@ public:
     Q_INVOKABLE void open(const QUrl &url);
     Q_INVOKABLE void save();
     Q_INVOKABLE void saveForClose();
+    // Synchronous save used before switching notes. Returns false when the
+    // document has no file to save into.
+    Q_INVOKABLE bool saveNow();
+    Q_INVOKABLE void openPath(const QString &path);
+    Q_INVOKABLE bool isNotePath(const QString &path) const;
     Q_INVOKABLE void saveAsDialog();
     Q_INVOKABLE void saveAs(const QUrl &url);
     Q_INVOKABLE void fileDialogCanceled();
@@ -74,9 +89,15 @@ public:
     Q_INVOKABLE void openExternalUrl(const QUrl &url);
     Q_INVOKABLE QVariantMap windowGeometry() const;
     Q_INVOKABLE void saveWindowGeometry(int x, int y, int width, int height, bool maximized);
+    Q_INVOKABLE QVariant setting(const QString &key, const QVariant &fallback) const;
+    Q_INVOKABLE void setSetting(const QString &key, const QVariant &value);
+    // Replace the editor with an empty, unsaved document.
+    Q_INVOKABLE void newDocument();
 
 signals:
     void fileUrlChanged();
+    void notesDirChanged();
+    void fileSaved(const QString &path);
     void modifiedChanged();
     void statusChanged();
     void wordCountChanged();
@@ -125,6 +146,8 @@ private:
     int m_lastChangeAdded = 0;
     QTimer m_wordCountTimer;
     QTimer m_recoveryTimer;
+    QTimer m_autosaveTimer;
+    QString m_notesDir;
     QFileSystemWatcher m_fileWatcher;
     QPointer<QTextDocument> m_document;
     QPointer<QWindow> m_parentWindow;

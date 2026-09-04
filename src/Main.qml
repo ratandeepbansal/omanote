@@ -28,7 +28,7 @@ ApplicationWindow {
     readonly property int editorFontPixelSize: scaledSize(20)
     readonly property int editorWidth: Math.min(
         Math.round(writerFontMetrics.averageCharacterWidth * 65),
-        Math.max(360, width - Math.round(writerFontMetrics.averageCharacterWidth * 20)))
+        Math.max(360, editorAreaWidth - Math.round(writerFontMetrics.averageCharacterWidth * 20)))
     property bool closeConfirmed: false
     property bool searchOpen: false
     property bool searchUpdating: false
@@ -38,12 +38,19 @@ ApplicationWindow {
     property string pendingAction: ""
     property bool replaceOpen: false
     property bool awaitingPendingSave: false
+    property bool sidebarOpen: backend.setting("sidebar/open", true)
+    property int sidebarWidth: backend.setting("sidebar/width", 260)
+    readonly property int sidebarMinWidth: scaledSize(200)
+    readonly property int sidebarMaxWidth: Math.round(width * 0.4)
+    readonly property int editorAreaWidth: width - (sidebarOpen ? sidebarWidth : 0)
 
     Material.theme: darkMode ? Material.Dark : Material.Light
     Material.accent: backend.themeAccent
     color: pageColor
 
     onClosing: function(close) {
+        if (backend.modified && backend.autosaveActive)
+            backend.saveNow();
         if (closeConfirmed || !backend.modified)
             return;
 
@@ -72,6 +79,63 @@ ApplicationWindow {
         } else if (action === "open") {
             backend.open(pendingOpenUrl);
         }
+    }
+
+    // Switching notes never prompts: notes autosave. Files opened from outside
+    // the notes folder keep the unsaved-changes prompt.
+    function openNote(path) {
+        if (path === "" || path === backend.filePath)
+            return;
+        if (backend.modified) {
+            if (backend.autosaveActive)
+                backend.saveNow();
+            if (backend.modified) {
+                requestOpen(Qt.resolvedUrl("file://" + path));
+                return;
+            }
+        }
+        backend.openPath(path);
+        editor.forceActiveFocus();
+    }
+
+    function newNote() {
+        if (backend.modified && backend.autosaveActive)
+            backend.saveNow();
+        var path = notesModel.createNote();
+        if (path === "")
+            return;
+        if (!sidebarOpen)
+            sidebarOpen = true;
+        if (backend.modified && !backend.autosaveActive) {
+            requestOpen(Qt.resolvedUrl("file://" + path));
+            return;
+        }
+        backend.openPath(path);
+        editor.forceActiveFocus();
+    }
+
+    function toggleSidebar() {
+        sidebarOpen = !sidebarOpen;
+        backend.setSetting("sidebar/open", sidebarOpen);
+        if (!sidebarOpen)
+            editor.forceActiveFocus();
+    }
+
+    function confirmDelete(path, title) {
+        deleteNoteDialog.notePath = path;
+        deleteNoteDialog.noteTitle = title;
+        deleteNoteDialog.open();
+    }
+
+    function togglePinCurrent() {
+        var path = backend.filePath;
+        if (path !== "" && notesModel.contains(path))
+            notesModel.setPinned(path, !notesModel.isPinned(path));
+    }
+
+    onActiveChanged: {
+        if (!active && backend.modified && backend.autosaveActive)
+            backend.saveNow();
     }
 
     FontMetrics {
@@ -187,7 +251,47 @@ ApplicationWindow {
     Shortcut {
         sequence: "Ctrl+N"
         context: Qt.ApplicationShortcut
+        onActivated: win.newNote()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+N"
+        context: Qt.ApplicationShortcut
         onActivated: backend.newWindow()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+\\"
+        context: Qt.ApplicationShortcut
+        onActivated: win.toggleSidebar()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+F"
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            if (!win.sidebarOpen)
+                win.toggleSidebar();
+            sidebar.focusSearch();
+        }
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Alt+Up"
+        context: Qt.ApplicationShortcut
+        onActivated: sidebar.moveSelection(-1)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Alt+Down"
+        context: Qt.ApplicationShortcut
+        onActivated: sidebar.moveSelection(1)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+P"
+        context: Qt.ApplicationShortcut
+        onActivated: win.togglePinCurrent()
     }
 
     Shortcut {
@@ -235,6 +339,20 @@ ApplicationWindow {
         context: Qt.ApplicationShortcut
         enabled: win.searchOpen
         onActivated: win.moveSearch(1)
+    }
+
+    Connections {
+        target: notesModel
+
+        function onNoteRemoved(path) {
+            if (path !== backend.filePath)
+                return;
+            var next = notesModel.pathAt(0);
+            if (next !== "")
+                backend.openPath(next);
+            else
+                backend.newDocument();
+        }
     }
 
     Connections {
@@ -311,6 +429,49 @@ ApplicationWindow {
         onCancelRequested: win.pendingAction = ""
     }
 
+    DeleteNoteDialog {
+        id: deleteNoteDialog
+        darkMode: win.darkMode
+        textScale: win.textScale
+        textColor: win.textColor
+        strongTextColor: win.strongTextColor
+        activeButtonColor: backend.themeAccent
+        containerWidth: win.width
+        containerHeight: win.height
+        onDeleteConfirmed: function(path) {
+            if (!notesModel.removeNote(path))
+                backend.setSearchHighlight("", -1);
+        }
+    }
+
+    RenameNoteDialog {
+        id: renameNoteDialog
+        darkMode: win.darkMode
+        textScale: win.textScale
+        textColor: win.textColor
+        strongTextColor: win.strongTextColor
+        activeButtonColor: backend.themeAccent
+        selectionColor: win.selectionFill
+        containerWidth: win.width
+        containerHeight: win.height
+        onRenameConfirmed: function(path, newFileName) {
+            var wasCurrent = path === backend.filePath;
+            if (wasCurrent && backend.modified)
+                backend.saveNow();
+            if (!notesModel.renameNote(path, newFileName)) {
+                error = "Could not rename. A file with that name may already exist.";
+                return;
+            }
+            close();
+            if (wasCurrent) {
+                var name = newFileName.trim();
+                if (!/\.(md|markdown)$/i.test(name))
+                    name += ".md";
+                backend.openPath(notesModel.notesDir + "/" + name);
+            }
+        }
+    }
+
     ExternalChangeDialog {
         id: externalChangeDialog
         darkMode: win.darkMode
@@ -331,13 +492,78 @@ ApplicationWindow {
         standardButtons: Dialog.Close
         anchors.centerIn: parent
         contentItem: Label {
-            text: "Ctrl+S  Save\nCtrl+Shift+S  Save As\nCtrl+O  Open\nCtrl+N  New Window\nCtrl+F  Find\nCtrl+H  Find and Replace\nCtrl+B  Bold\nCtrl+I  Italic\nCtrl+K  Link\nCtrl+P  Print\nF11 / Super+F  Fullscreen\nCtrl+?  Shortcuts"
+            text: "Ctrl+N  New Note\nCtrl+\\  Toggle Sidebar\nCtrl+Shift+F  Search Notes\nCtrl+Alt+Up/Down  Previous/Next Note\nCtrl+Shift+P  Pin Note\nCtrl+S  Save\nCtrl+Shift+S  Save As\nCtrl+O  Open\nCtrl+Shift+N  New Window\nCtrl+F  Find\nCtrl+H  Find and Replace\nCtrl+B  Bold\nCtrl+I  Italic\nCtrl+K  Link\nCtrl+P  Print\nF11 / Super+F  Fullscreen\nCtrl+?  Shortcuts"
             lineHeight: 1.5
         }
     }
 
+    NotesSidebar {
+        id: sidebar
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: win.sidebarOpen ? win.sidebarWidth : 0
+        visible: width > 0
+        clip: true
+        darkMode: win.darkMode
+        pageColor: win.pageColor
+        textColor: win.textColor
+        mutedColor: win.mutedColor
+        accentColor: backend.themeAccent
+        selectionColor: win.selectionFill
+        textScale: win.textScale
+        currentPath: backend.filePath
+
+        Behavior on width {
+            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+        }
+
+        onNoteActivated: function(path) { win.openNote(path) }
+        onNewNoteRequested: win.newNote()
+        onDeleteRequested: function(path, title) { win.confirmDelete(path, title) }
+        onRenameRequested: function(path, fileName) {
+            renameNoteDialog.notePath = path;
+            renameNoteDialog.fileName = fileName;
+            renameNoteDialog.open();
+        }
+    }
+
+    // Drag handle on the sidebar edge. Dragging past the minimum collapses.
+    MouseArea {
+        id: sidebarResizer
+        anchors.left: sidebar.right
+        anchors.leftMargin: -3
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: 7
+        visible: win.sidebarOpen
+        cursorShape: Qt.SplitHCursor
+        hoverEnabled: true
+        property int pressX: 0
+        property int startWidth: 0
+        onPressed: function(mouse) {
+            pressX = mouse.x + sidebar.width;
+            startWidth = sidebar.width;
+        }
+        onPositionChanged: function(mouse) {
+            if (!pressed)
+                return;
+            var target = startWidth + (mouse.x + sidebar.width - pressX);
+            if (target < win.sidebarMinWidth * 0.6) {
+                win.toggleSidebar();
+                return;
+            }
+            win.sidebarWidth = Math.max(win.sidebarMinWidth,
+                                        Math.min(win.sidebarMaxWidth, target));
+        }
+        onReleased: backend.setSetting("sidebar/width", win.sidebarWidth)
+    }
+
     Item {
-        anchors.fill: parent
+        anchors.left: sidebar.right
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
 
         Flickable {
             id: editorFlick
@@ -804,6 +1030,14 @@ ApplicationWindow {
             anchors.bottomMargin: 10
             spacing: 12
             opacity: 0.55
+
+            FooterIconButton {
+                objectName: "sidebarButton"
+                iconName: "sidebar"
+                iconColor: win.mutedColor
+                tooltip: win.sidebarOpen ? "Hide notes (Ctrl+\\)" : "Show notes (Ctrl+\\)"
+                onClicked: win.toggleSidebar()
+            }
 
             FooterIconButton {
                 objectName: "saveButton"
