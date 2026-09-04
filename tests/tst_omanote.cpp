@@ -162,6 +162,39 @@ private slots:
         QCOMPARE(model.folders(), QStringList{QStringLiteral("Work")});
     }
 
+    void extractsAndFiltersTags() {
+        QCOMPARE(NotesModel::tagsFor(QStringLiteral("# Heading\nbuy #Milk and #eggs/free-range\n#123 no\n`#code` no\n```\n#fenced\n```\nemail@x.com #a_b")),
+                 (QStringList{QStringLiteral("a_b"), QStringLiteral("eggs/free-range"), QStringLiteral("milk")}));
+        QCOMPARE(NotesModel::tagsFor(QStringLiteral("---\ntitle: x\ntags: [Work, \"home\"]\n---\n# T")),
+                 (QStringList{QStringLiteral("home"), QStringLiteral("work")}));
+        QCOMPARE(NotesModel::tagsFor(QStringLiteral("---\ntags:\n  - one\n  - two\n---\n")),
+                 (QStringList{QStringLiteral("one"), QStringLiteral("two")}));
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        auto write = [&](const QString &name, const QString &text) {
+            QFile file(dir.filePath(name));
+            QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
+            file.write(text.toUtf8());
+        };
+        write(QStringLiteral("a.md"), QStringLiteral("# A\n#work #urgent"));
+        write(QStringLiteral("b.md"), QStringLiteral("# B\n#work"));
+        write(QStringLiteral("c.md"), QStringLiteral("# C\nnothing"));
+
+        NotesModel model;
+        model.setNotesDir(dir.path());
+        QCOMPARE(model.tags(), (QStringList{QStringLiteral("urgent"), QStringLiteral("work")}));
+        model.setTag(QStringLiteral("work"));
+        QCOMPARE(model.rowCount(), 2);
+        model.setFilter(QStringLiteral("tag:urgent"));
+        QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(model.data(model.index(0), NotesModel::TitleRole).toString(), QStringLiteral("A"));
+        model.setTag(QString());
+        model.setFilter(QStringLiteral("#work B"));
+        QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(model.data(model.index(0), NotesModel::TagsRole).toStringList(), QStringList{QStringLiteral("work")});
+    }
+
     void autosavesNotesInsideTheNotesFolder() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());

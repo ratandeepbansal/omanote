@@ -20,6 +20,9 @@ class NotesModel : public QAbstractListModel {
     // Folder filter: "" shows every note, otherwise only notes in that subfolder.
     Q_PROPERTY(QString folder READ folder WRITE setFolder NOTIFY folderChanged)
     Q_PROPERTY(QStringList folders READ folders NOTIFY foldersChanged)
+    // Tag filter: "" shows every note, otherwise only notes carrying that tag.
+    Q_PROPERTY(QString tag READ tag WRITE setTag NOTIFY tagChanged)
+    Q_PROPERTY(QStringList tags READ tags NOTIFY tagsChanged)
 
 public:
     enum Roles {
@@ -30,6 +33,7 @@ public:
         DateRole,
         PinnedRole,
         FolderRole,
+        TagsRole,
     };
     Q_ENUM(Roles)
 
@@ -41,6 +45,7 @@ public:
         QDateTime modified;
         bool pinned = false;
         QString folder; // relative subfolder, empty for the notes root
+        QStringList tags; // lower-case, unique, sorted
     };
 
     explicit NotesModel(QObject *parent = nullptr);
@@ -54,6 +59,9 @@ public:
     QString folder() const { return m_folder; }
     void setFolder(const QString &folder);
     QStringList folders() const { return m_folders; }
+    QString tag() const { return m_tag; }
+    void setTag(const QString &tag);
+    QStringList tags() const { return m_tags; }
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role) const override;
@@ -81,6 +89,7 @@ public:
     static QString dateLabel(const QDateTime &modified, const QDateTime &now);
     static QString stripMarkdown(const QString &line);
     static bool validFolderName(const QString &name);
+    static QStringList tagsFor(const QString &text);
 
 signals:
     void notesDirChanged();
@@ -88,6 +97,8 @@ signals:
     void countChanged();
     void folderChanged();
     void foldersChanged();
+    void tagChanged();
+    void tagsChanged();
     void noteRemoved(const QString &path);
 
 private:
@@ -104,12 +115,14 @@ private:
     QString m_filter;
     QString m_folder;
     QStringList m_folders;
+    QString m_tag;
+    QStringList m_tags;
     QVector<Note> m_notes;
     QVector<int> m_visible;
     QSet<QString> m_pins;
     QFileSystemWatcher m_watcher;
     QTimer m_refreshTimer;
     // Cache of parsed titles/previews keyed by path; invalidated by mtime+size.
-    struct CacheEntry { QDateTime modified; qint64 size; QString title; QString preview; };
+    struct CacheEntry { QDateTime modified; qint64 size; QString title; QString preview; QStringList tags; };
     mutable QHash<QString, CacheEntry> m_cache;
 };

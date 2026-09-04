@@ -5,6 +5,7 @@ TARGET = omanote
 TEMPLATE = app
 
 HEADERS += \
+    src/tagpattern.h \
     src/backend.h \
     src/markdownhighlighter.h \
     src/systemtheme.h \

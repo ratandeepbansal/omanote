@@ -221,6 +221,49 @@ Item {
             }
         }
 
+        // Tag strip: one chip per tag found across the library. Hidden when
+        // no note carries a tag, so an untagged library looks like before.
+        Flow {
+            Layout.fillWidth: true
+            Layout.leftMargin: 12
+            Layout.rightMargin: 12
+            Layout.bottomMargin: 8
+            spacing: 4
+            visible: notesModel.tags.length > 0
+
+            Repeater {
+                model: notesModel.tags
+
+                delegate: Rectangle {
+                    id: tagChip
+                    required property string modelData
+                    readonly property bool active: notesModel.tag === modelData
+
+                    width: tagLabel.implicitWidth + panel.scaledSize(12)
+                    height: panel.scaledSize(20)
+                    radius: 4
+                    color: active ? Qt.rgba(panel.accentColor.r, panel.accentColor.g, panel.accentColor.b, 0.25)
+                         : tagMouse.containsMouse ? panel.hoverColor : "transparent"
+
+                    Label {
+                        id: tagLabel
+                        anchors.centerIn: parent
+                        text: "#" + tagChip.modelData
+                        color: tagChip.active ? panel.textColor : panel.accentColor
+                        font.family: "iA Writer Mono S"
+                        font.pixelSize: panel.scaledSize(11)
+                    }
+
+                    MouseArea {
+                        id: tagMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: notesModel.tag = tagChip.active ? "" : tagChip.modelData
+                    }
+                }
+            }
+        }
+
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
@@ -384,7 +427,7 @@ Item {
                 wrapMode: Text.Wrap
                 visible: noteList.count === 0
                 text: notesModel.totalCount === 0 ? "No notes yet"
-                : (filterField.text.length === 0 ? "No notes in this folder" : "No matches")
+                : (filterField.text.length === 0 && notesModel.tag === "" ? "No notes in this folder" : "No matches")
                 color: panel.mutedColor
                 font.family: "iA Writer Mono S"
                 font.pixelSize: panel.scaledSize(12)

@@ -73,6 +73,7 @@ or set `notes/folder` in `~/.config/Omacom/omanote.conf`.
 | `Delete` on a selected row | Delete note, with confirmation |
 | Right-click a note | Pin, rename file, move to folder, show in folder, delete |
 | Folder chips above the list | Filter by folder; `+` creates one; right-click renames or deletes |
+| Tag chips | Any `#tag` in a note (or `tags:` in front matter) becomes a chip; click to filter. `tag:foo` works in search too |
 | `Ctrl+Shift+N` | New window |
 | `Ctrl+O` | Open any Markdown file |
 | `Ctrl+S` / `Ctrl+Shift+S` | Save / save as, for files outside the notes folder |
@@ -85,7 +86,7 @@ or set `notes/folder` in `~/.config/Omacom/omanote.conf`.
 ## Requests welcome
 
 This is actively being built, and I am using it every day. If there is something you want from a notes
-app on Omarchy, [open an issue](https://github.com/ratandeepbansal/omanote/issues). Tags, a
+app on Omarchy, [open an issue](https://github.com/ratandeepbansal/omanote/issues). A
 different sort order, a different default location, a feature from Apple Notes you miss too. Small
 requests get built quickly. Pull requests are welcome as well.
 

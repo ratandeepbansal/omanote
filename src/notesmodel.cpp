@@ -1,4 +1,5 @@
 #include "notesmodel.h"
+#include "tagpattern.h"
 
 #include <QDir>
 #include <QFile>
@@ -14,7 +15,7 @@
 
 namespace {
 const int kPreviewLimit = 120;
-const int kReadLimit = 4096;
+const int kReadLimit = 1 << 20; // tags can sit anywhere in the note
 }
 
 NotesModel::NotesModel(QObject *parent) : QAbstractListModel(parent) {
@@ -59,6 +60,18 @@ void NotesModel::setFolder(const QString &folder) {
     emit countChanged();
 }
 
+void NotesModel::setTag(const QString &tag) {
+    const QString normalized = tag.trimmed().toLower();
+    if (m_tag == normalized)
+        return;
+    m_tag = normalized;
+    emit tagChanged();
+    beginResetModel();
+    rebuildVisible();
+    endResetModel();
+    emit countChanged();
+}
+
 int NotesModel::rowCount(const QModelIndex &parent) const {
     return parent.isValid() ? 0 : m_visible.size();
 }
@@ -75,6 +88,7 @@ QVariant NotesModel::data(const QModelIndex &index, int role) const {
     case DateRole: return dateLabel(note.modified, QDateTime::currentDateTime());
     case PinnedRole: return note.pinned;
     case FolderRole: return note.folder;
+    case TagsRole: return note.tags;
     }
     return {};
 }
@@ -82,7 +96,7 @@ QVariant NotesModel::data(const QModelIndex &index, int role) const {
 QHash<int, QByteArray> NotesModel::roleNames() const {
     return {{PathRole, "path"},       {FileNameRole, "fileName"}, {TitleRole, "title"},
             {PreviewRole, "preview"}, {DateRole, "date"},         {PinnedRole, "pinned"},
-            {FolderRole, "folder"}};
+            {FolderRole, "folder"},   {TagsRole, "tags"}};
 }
 
 void NotesModel::refresh() {
@@ -128,10 +142,11 @@ void NotesModel::scanDirectory() {
             CacheEntry &entry = m_cache[note.path];
             if (entry.modified != note.modified || entry.size != info.size()) {
                 readNote(note);
-                entry = {note.modified, info.size(), note.title, note.preview};
+                entry = {note.modified, info.size(), note.title, note.preview, note.tags};
             } else {
                 note.title = entry.title;
                 note.preview = entry.preview;
+                note.tags = entry.tags;
             }
             notes.append(note);
         }
@@ -148,6 +163,20 @@ void NotesModel::scanDirectory() {
     }
     std::sort(notes.begin(), notes.end(), &NotesModel::lessThan);
     m_notes = notes;
+    QSet<QString> tagSet;
+    for (const Note &note : m_notes)
+        for (const QString &tag : note.tags)
+            tagSet.insert(tag);
+    QStringList tags(tagSet.cbegin(), tagSet.cend());
+    tags.sort();
+    if (tags != m_tags) {
+        m_tags = tags;
+        emit tagsChanged();
+    }
+    if (!m_tag.isEmpty() && !m_tags.contains(m_tag)) {
+        m_tag.clear();
+        emit tagChanged();
+    }
     if (folders != m_folders) {
         m_folders = folders;
         emit foldersChanged();
@@ -169,10 +198,27 @@ bool NotesModel::lessThan(const Note &a, const Note &b) {
 
 void NotesModel::rebuildVisible() {
     m_visible.clear();
-    const QString needle = m_filter.trimmed();
+    // "tag:foo" words in the search box narrow by tag; the rest is free text.
+    QStringList requiredTags;
+    if (!m_tag.isEmpty())
+        requiredTags.append(m_tag);
+    QStringList words;
+    for (const QString &word : m_filter.split(QLatin1Char(' '), Qt::SkipEmptyParts)) {
+        if (word.startsWith(QStringLiteral("tag:"), Qt::CaseInsensitive) && word.size() > 4)
+            requiredTags.append(word.mid(4).toLower());
+        else if (word.startsWith(QLatin1Char('#')) && word.size() > 1)
+            requiredTags.append(word.mid(1).toLower());
+        else
+            words.append(word);
+    }
+    const QString needle = words.join(QLatin1Char(' ')).trimmed();
     for (int i = 0; i < m_notes.size(); ++i) {
         const Note &note = m_notes.at(i);
         if (!m_folder.isEmpty() && note.folder != m_folder)
+            continue;
+        const bool hasTags = std::all_of(requiredTags.cbegin(), requiredTags.cend(),
+                                         [&note](const QString &tag) { return note.tags.contains(tag); });
+        if (!hasTags)
             continue;
         if (needle.isEmpty()) {
             m_visible.append(i);
@@ -199,6 +245,65 @@ void NotesModel::readNote(Note &note) const {
         text = QString::fromUtf8(file.read(kReadLimit));
     note.title = titleFor(text, note.fileName);
     note.preview = previewFor(text);
+    note.tags = tagsFor(text);
+}
+
+QStringList NotesModel::tagsFor(const QString &text) {
+    QSet<QString> tags;
+    QStringList lines = text.split(QLatin1Char('\n'));
+
+    // YAML front matter: "tags: [a, b]", "tags: a, b" or a "- a" list below "tags:".
+    if (!lines.isEmpty() && lines.first().trimmed() == QStringLiteral("---")) {
+        int end = -1;
+        for (int i = 1; i < lines.size(); ++i) {
+            if (lines.at(i).trimmed() == QStringLiteral("---")) { end = i; break; }
+        }
+        if (end > 0) {
+            static const QRegularExpression tagsKey(QStringLiteral("^tags\\s*:\\s*(.*)$"));
+            static const QRegularExpression listItem(QStringLiteral("^\\s*-\\s*(.+)$"));
+            for (int i = 1; i < end; ++i) {
+                const QRegularExpressionMatch key = tagsKey.match(lines.at(i));
+                if (!key.hasMatch())
+                    continue;
+                QString value = key.captured(1).trimmed();
+                if (value.isEmpty()) {
+                    for (int j = i + 1; j < end; ++j) {
+                        const QRegularExpressionMatch item = listItem.match(lines.at(j));
+                        if (!item.hasMatch())
+                            break;
+                        value += item.captured(1) + QLatin1Char(',');
+                    }
+                }
+                value.remove(QLatin1Char('[')).remove(QLatin1Char(']'));
+                for (QString tag : value.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+                    tag = tag.trimmed().remove(QLatin1Char('"')).remove(QLatin1Char('\''));
+                    if (tag.startsWith(QLatin1Char('#')))
+                        tag.remove(0, 1);
+                    if (!tag.isEmpty())
+                        tags.insert(tag.toLower());
+                }
+            }
+            lines = lines.mid(end + 1);
+        }
+    }
+
+    bool inFence = false;
+    static const QRegularExpression inlineCode(QStringLiteral("`[^`]*`"));
+    for (QString line : lines) {
+        if (line.trimmed().startsWith(QStringLiteral("```"))) {
+            inFence = !inFence;
+            continue;
+        }
+        if (inFence)
+            continue;
+        line.remove(inlineCode);
+        QRegularExpressionMatchIterator it = tagPattern().globalMatch(line);
+        while (it.hasNext())
+            tags.insert(it.next().captured(1).toLower());
+    }
+    QStringList out(tags.cbegin(), tags.cend());
+    out.sort();
+    return out;
 }
 
 QString NotesModel::stripMarkdown(const QString &line) {

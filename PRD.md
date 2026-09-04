@@ -32,7 +32,7 @@ and deletion.
 
 ## 4. Non-goals (v1)
 
-- Tags / notebooks. (Folders shipped in v0.2 as one level of subdirectories under the notes dir.)
+- Notebooks. (v0.2 shipped folders as one level of subdirectories, and tags as `#tag` text / front matter.)
 - Sync, cloud, or accounts.
 - Rich text, attachments, images, checklists rendering.
 - Multi-window note library (Ctrl+N still opens a new window, sharing the same folder).

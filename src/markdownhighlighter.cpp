@@ -1,4 +1,5 @@
 #include "markdownhighlighter.h"
+#include "tagpattern.h"
 
 #include <QColor>
 #include <QFont>
@@ -95,6 +96,9 @@ void MarkdownHighlighter::rebuildFormats() {
     m_linkFormat.setForeground(link);
     m_linkFormat.setFontUnderline(true);
 
+    m_tagFormat = QTextCharFormat();
+    m_tagFormat.setForeground(link);
+
     m_searchFormat = QTextCharFormat();
     m_searchFormat.setBackground(m_darkMode ? QColor(QStringLiteral("#725b18"))
                                             : QColor(QStringLiteral("#ffe58a")));
@@ -184,6 +188,16 @@ void MarkdownHighlighter::highlightInline(const QString &text) {
         while (codeMatches.hasNext()) {
             const QRegularExpressionMatch match = codeMatches.next();
             setFormat(match.capturedStart(0), match.capturedLength(0), m_codeFormat);
+        }
+    }
+
+    // Inline #tags take the accent colour. Headings never match: the pattern
+    // needs a word character right after the hash.
+    if (text.contains(QLatin1Char('#'))) {
+        QRegularExpressionMatchIterator tagMatches = tagPattern().globalMatch(text);
+        while (tagMatches.hasNext()) {
+            const QRegularExpressionMatch match = tagMatches.next();
+            setFormat(match.capturedStart(0), match.capturedLength(0), m_tagFormat);
         }
     }
 

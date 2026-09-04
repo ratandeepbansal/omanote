@@ -10,6 +10,7 @@ SOURCES += \
     ../src/markdownhighlighter.cpp \
     ../src/notesmodel.cpp
 HEADERS += \
+    ../src/tagpattern.h \
     ../src/backend.h \
     ../src/markdownhighlighter.h \
     ../src/notesmodel.h
