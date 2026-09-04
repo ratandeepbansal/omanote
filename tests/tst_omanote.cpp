@@ -109,6 +109,59 @@ private slots:
         QCOMPARE(model.totalCount(), 1);
     }
 
+    void organisesNotesIntoFolders() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        auto write = [&](const QString &name, const QString &text) {
+            QDir().mkpath(QFileInfo(dir.filePath(name)).absolutePath());
+            QFile file(dir.filePath(name));
+            QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
+            file.write(text.toUtf8());
+        };
+        write(QStringLiteral("root.md"), QStringLiteral("# Root"));
+        write(QStringLiteral("Work/plan.md"), QStringLiteral("# Plan"));
+        write(QStringLiteral(".hidden/x.md"), QStringLiteral("# Hidden"));
+        write(QStringLiteral("assets/img.md"), QStringLiteral("# Asset"));
+
+        NotesModel model;
+        model.setNotesDir(dir.path());
+        QCOMPARE(model.folders(), QStringList{QStringLiteral("Work")});
+        QCOMPARE(model.totalCount(), 2);
+        QCOMPARE(model.folderOf(dir.filePath(QStringLiteral("Work/plan.md"))), QStringLiteral("Work"));
+
+        model.setFolder(QStringLiteral("Work"));
+        QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(model.data(model.index(0), NotesModel::TitleRole).toString(), QStringLiteral("Plan"));
+        // New notes land in the selected folder.
+        const QString created = model.createNote();
+        QVERIFY(created.startsWith(dir.filePath(QStringLiteral("Work/"))));
+        QCOMPARE(model.rowCount(), 2);
+        model.setFolder(QString());
+
+        QVERIFY(!model.createFolder(QStringLiteral(".secret")));
+        QVERIFY(!model.createFolder(QStringLiteral("assets")));
+        QVERIFY(model.createFolder(QStringLiteral("Home")));
+        QCOMPARE(model.folders(), (QStringList{QStringLiteral("Home"), QStringLiteral("Work")}));
+
+        const QString root = dir.filePath(QStringLiteral("root.md"));
+        model.setPinned(root, true);
+        QVERIFY(model.moveNote(root, QStringLiteral("Home")));
+        const QString moved = dir.filePath(QStringLiteral("Home/root.md"));
+        QVERIFY(QFileInfo::exists(moved));
+        QVERIFY(model.isPinned(moved));
+        QVERIFY(!model.moveNote(moved, QStringLiteral("Nope")));
+
+        QVERIFY(model.renameFolder(QStringLiteral("Home"), QStringLiteral("Personal")));
+        QVERIFY(model.isPinned(dir.filePath(QStringLiteral("Personal/root.md"))));
+        QCOMPARE(model.folders(), (QStringList{QStringLiteral("Personal"), QStringLiteral("Work")}));
+
+        QSignalSpy removed(&model, &NotesModel::noteRemoved);
+        QVERIFY(model.removeFolder(QStringLiteral("Personal")));
+        QCOMPARE(removed.count(), 1);
+        QVERIFY(!QFileInfo::exists(dir.filePath(QStringLiteral("Personal"))));
+        QCOMPARE(model.folders(), QStringList{QStringLiteral("Work")});
+    }
+
     void autosavesNotesInsideTheNotesFolder() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());

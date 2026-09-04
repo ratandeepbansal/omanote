@@ -21,6 +21,17 @@ Item {
     signal deleteRequested(string path, string title)
     signal renameRequested(string path, string fileName)
     signal collapseRequested()
+    signal newFolderRequested()
+    signal moveRequested(string path, string folder)
+    signal renameFolderRequested(string folder)
+    signal deleteFolderRequested(string folder)
+
+    function moveCurrentNote() {
+        if (panel.currentPath === "" || !notesModel.contains(panel.currentPath))
+            return;
+        moveMenu.notePath = panel.currentPath;
+        moveMenu.popup();
+    }
 
     function scaledSize(pixels) {
         return Math.max(1, Math.round(pixels * panel.textScale));
@@ -131,6 +142,85 @@ Item {
             }
         }
 
+        // Folder strip: "All" plus one chip per subfolder of the notes dir.
+        Flow {
+            Layout.fillWidth: true
+            Layout.leftMargin: 12
+            Layout.rightMargin: 12
+            Layout.bottomMargin: 8
+            spacing: 4
+
+            Repeater {
+                model: [""].concat(notesModel.folders)
+
+                delegate: Rectangle {
+                    id: chip
+                    required property string modelData
+                    readonly property bool active: notesModel.folder === modelData
+                    readonly property string label: modelData === "" ? "All" : modelData
+
+                    width: chipLabel.implicitWidth + panel.scaledSize(16)
+                    height: panel.scaledSize(22)
+                    radius: height / 2
+                    color: active ? panel.selectionColor
+                         : chipMouse.containsMouse ? panel.hoverColor : "transparent"
+                    border.width: 1
+                    border.color: active ? "transparent" : panel.lineColor
+
+                    Label {
+                        id: chipLabel
+                        anchors.centerIn: parent
+                        text: chip.label
+                        color: chip.active ? panel.textColor : panel.mutedColor
+                        font.family: "iA Writer Mono S"
+                        font.pixelSize: panel.scaledSize(11)
+                    }
+
+                    MouseArea {
+                        id: chipMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.RightButton && chip.modelData !== "") {
+                                folderMenu.folder = chip.modelData;
+                                folderMenu.popup();
+                                return;
+                            }
+                            notesModel.folder = chip.modelData;
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: panel.scaledSize(22)
+                height: panel.scaledSize(22)
+                radius: height / 2
+                color: addFolderMouse.containsMouse ? panel.hoverColor : "transparent"
+                border.width: 1
+                border.color: panel.lineColor
+
+                Label {
+                    anchors.centerIn: parent
+                    text: "+"
+                    color: panel.mutedColor
+                    font.family: "iA Writer Mono S"
+                    font.pixelSize: panel.scaledSize(12)
+                }
+
+                MouseArea {
+                    id: addFolderMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: panel.newFolderRequested()
+                }
+                ToolTip.visible: addFolderMouse.containsMouse
+                ToolTip.text: "New folder"
+                ToolTip.delay: 600
+            }
+        }
+
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
@@ -174,6 +264,7 @@ Item {
                 required property string preview
                 required property string date
                 required property bool pinned
+                required property string folder
 
                 readonly property string noteTitle: title
                 readonly property bool selected: path === panel.currentPath
@@ -245,6 +336,17 @@ Item {
                         }
 
                         Label {
+                            visible: notesModel.folder === "" && row.folder !== ""
+                            text: row.folder
+                            color: panel.accentColor
+                            opacity: 0.85
+                            elide: Text.ElideRight
+                            Layout.maximumWidth: panel.scaledSize(90)
+                            font.family: "iA Writer Mono S"
+                            font.pixelSize: panel.scaledSize(11)
+                        }
+
+                        Label {
                             Layout.fillWidth: true
                             text: row.preview.length > 0 ? row.preview : "No additional text"
                             color: panel.mutedColor
@@ -281,7 +383,8 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 visible: noteList.count === 0
-                text: notesModel.totalCount === 0 ? "No notes yet" : "No matches"
+                text: notesModel.totalCount === 0 ? "No notes yet"
+                : (filterField.text.length === 0 ? "No notes in this folder" : "No matches")
                 color: panel.mutedColor
                 font.family: "iA Writer Mono S"
                 font.pixelSize: panel.scaledSize(12)
@@ -299,7 +402,7 @@ Item {
             Layout.leftMargin: 20
             Layout.topMargin: 8
             Layout.bottomMargin: 10
-            text: notesModel.totalCount + (notesModel.totalCount === 1 ? " Note" : " Notes")
+            text: notesModel.count + (notesModel.count === 1 ? " Note" : " Notes")
             color: panel.mutedColor
             opacity: 0.75
             font.family: "iA Writer Mono S"
@@ -331,13 +434,56 @@ Item {
             onTriggered: panel.renameRequested(rowMenu.notePath, rowMenu.noteFileName)
         }
         MenuItem {
+            text: "Move to folder…"
+            onTriggered: {
+                moveMenu.notePath = rowMenu.notePath;
+                moveMenu.popup();
+            }
+        }
+        MenuItem {
             text: "Show in folder"
-            onTriggered: backend.openExternalUrl("file://" + notesModel.notesDir)
+            onTriggered: backend.openExternalUrl("file://" + rowMenu.notePath.substring(0, rowMenu.notePath.lastIndexOf("/")))
         }
         MenuSeparator {}
         MenuItem {
             text: "Delete…"
             onTriggered: panel.deleteRequested(rowMenu.notePath, rowMenu.noteTitle)
+        }
+    }
+
+    Menu {
+        id: moveMenu
+        property string notePath: ""
+
+        Instantiator {
+            model: [""].concat(notesModel.folders)
+            delegate: MenuItem {
+                required property string modelData
+                text: modelData === "" ? "Notes (top level)" : modelData
+                enabled: notesModel.folderOf(moveMenu.notePath) !== modelData
+                onTriggered: panel.moveRequested(moveMenu.notePath, modelData)
+            }
+            onObjectAdded: function(index, object) { moveMenu.insertItem(index, object) }
+            onObjectRemoved: function(index, object) { moveMenu.removeItem(object) }
+        }
+    }
+
+    Menu {
+        id: folderMenu
+        property string folder: ""
+
+        MenuItem {
+            text: "Rename folder…"
+            onTriggered: panel.renameFolderRequested(folderMenu.folder)
+        }
+        MenuItem {
+            text: "Show in file manager"
+            onTriggered: backend.openExternalUrl("file://" + notesModel.notesDir + "/" + folderMenu.folder)
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: "Delete folder…"
+            onTriggered: panel.deleteFolderRequested(folderMenu.folder)
         }
     }
 }

@@ -6,6 +6,11 @@ Dialog {
 
     property string notePath: ""
     property string fileName: ""
+    // "note" renames a file, "folder" renames a folder, "newFolder" creates one.
+    property string kind: "note"
+    property string heading: kind === "newFolder" ? "New folder"
+                           : kind === "folder" ? "Rename folder" : "Rename file"
+    property string confirmLabel: kind === "newFolder" ? "Create" : "Rename"
     property bool darkMode: true
     property color textColor: darkMode ? "#d0d0d0" : "#42464c"
     property color strongTextColor: darkMode ? "#eeeeee" : "#222324"
@@ -48,7 +53,7 @@ Dialog {
         spacing: 12
 
         Label {
-            text: "Rename file"
+            text: root.heading
             color: root.strongTextColor
             font.family: "iA Writer Mono S"
             font.pixelSize: Math.round(16 * root.textScale)
@@ -110,7 +115,7 @@ Dialog {
             }
 
             SquareDialogButton {
-                text: "Rename"
+                text: root.confirmLabel
                 primary: true
                 darkMode: root.darkMode
                 textScale: root.textScale

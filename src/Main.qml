@@ -122,9 +122,21 @@ ApplicationWindow {
     }
 
     function confirmDelete(path, title) {
+        deleteNoteDialog.isFolder = false;
         deleteNoteDialog.notePath = path;
         deleteNoteDialog.noteTitle = title;
         deleteNoteDialog.open();
+    }
+
+    function moveNote(path, folder) {
+        var wasCurrent = path === backend.filePath;
+        if (wasCurrent && backend.modified)
+            backend.saveNow();
+        var name = path.substring(path.lastIndexOf("/") + 1);
+        if (!notesModel.moveNote(path, folder))
+            return;
+        if (wasCurrent)
+            backend.openPath(notesModel.notesDir + "/" + (folder !== "" ? folder + "/" : "") + name);
     }
 
     function togglePinCurrent() {
@@ -295,6 +307,16 @@ ApplicationWindow {
     }
 
     Shortcut {
+        sequence: "Ctrl+Shift+M"
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            if (!win.sidebarOpen)
+                win.sidebarOpen = true;
+            sidebar.moveCurrentNote();
+        }
+    }
+
+    Shortcut {
         sequence: "Ctrl+Shift+S"
         context: Qt.ApplicationShortcut
         onActivated: backend.saveAsDialog()
@@ -441,7 +463,12 @@ ApplicationWindow {
         activeButtonColor: backend.themeAccent
         containerWidth: win.width
         containerHeight: win.height
-        onDeleteConfirmed: function(path) { notesModel.removeNote(path) }
+        onDeleteConfirmed: function(path) {
+            if (isFolder)
+                notesModel.removeFolder(path);
+            else
+                notesModel.removeNote(path);
+        }
         // Popups hand focus back to the sidebar list on close; the editor
         // is where typing should land after a delete or a cancel.
         onClosed: editor.forceActiveFocus()
@@ -458,7 +485,31 @@ ApplicationWindow {
         containerWidth: win.width
         containerHeight: win.height
         onRenameConfirmed: function(path, newFileName) {
+            if (kind === "newFolder") {
+                if (!notesModel.createFolder(newFileName)) {
+                    error = "Could not create folder. Check the name or whether it already exists.";
+                    return;
+                }
+                close();
+                notesModel.folder = newFileName.trim();
+                return;
+            }
+            if (kind === "folder") {
+                if (backend.modified && backend.autosaveActive)
+                    backend.saveNow();
+                var openFolder = notesModel.folderOf(backend.filePath);
+                var openName = backend.filePath.substring(backend.filePath.lastIndexOf("/") + 1);
+                if (!notesModel.renameFolder(path, newFileName)) {
+                    error = "Could not rename folder. A folder with that name may already exist.";
+                    return;
+                }
+                close();
+                if (openFolder === path)
+                    backend.openPath(notesModel.notesDir + "/" + newFileName.trim() + "/" + openName);
+                return;
+            }
             var wasCurrent = path === backend.filePath;
+            var folder = notesModel.folderOf(path);
             if (wasCurrent && backend.modified)
                 backend.saveNow();
             if (!notesModel.renameNote(path, newFileName)) {
@@ -470,7 +521,7 @@ ApplicationWindow {
                 var name = newFileName.trim();
                 if (!/\.(md|markdown)$/i.test(name))
                     name += ".md";
-                backend.openPath(notesModel.notesDir + "/" + name);
+                backend.openPath(notesModel.notesDir + "/" + (folder !== "" ? folder + "/" : "") + name);
             }
         }
     }
@@ -495,7 +546,7 @@ ApplicationWindow {
         standardButtons: Dialog.Close
         anchors.centerIn: parent
         contentItem: Label {
-            text: "Ctrl+N  New Note\nCtrl+\\  Toggle Sidebar\nCtrl+Shift+F  Search Notes\nCtrl+Alt+Up/Down  Previous/Next Note\nCtrl+Shift+P  Pin Note\nCtrl+S  Save\nCtrl+Shift+S  Save As\nCtrl+O  Open\nCtrl+Shift+N  New Window\nCtrl+F  Find\nCtrl+H  Find and Replace\nCtrl+B  Bold\nCtrl+I  Italic\nCtrl+K  Link\nCtrl+P  Print\nF11 / Super+F  Fullscreen\nCtrl+?  Shortcuts"
+            text: "Ctrl+N  New Note\nCtrl+\\  Toggle Sidebar\nCtrl+Shift+F  Search Notes\nCtrl+Alt+Up/Down  Previous/Next Note\nCtrl+Shift+P  Pin Note\nCtrl+Shift+M  Move Note to Folder\nCtrl+S  Save\nCtrl+Shift+S  Save As\nCtrl+O  Open\nCtrl+Shift+N  New Window\nCtrl+F  Find\nCtrl+H  Find and Replace\nCtrl+B  Bold\nCtrl+I  Italic\nCtrl+K  Link\nCtrl+P  Print\nF11 / Super+F  Fullscreen\nCtrl+?  Shortcuts"
             lineHeight: 1.5
         }
     }
@@ -525,9 +576,29 @@ ApplicationWindow {
         onNewNoteRequested: win.newNote()
         onDeleteRequested: function(path, title) { win.confirmDelete(path, title) }
         onRenameRequested: function(path, fileName) {
+            renameNoteDialog.kind = "note";
             renameNoteDialog.notePath = path;
             renameNoteDialog.fileName = fileName;
             renameNoteDialog.open();
+        }
+        onMoveRequested: function(path, folder) { win.moveNote(path, folder) }
+        onNewFolderRequested: {
+            renameNoteDialog.kind = "newFolder";
+            renameNoteDialog.notePath = "";
+            renameNoteDialog.fileName = "";
+            renameNoteDialog.open();
+        }
+        onRenameFolderRequested: function(folder) {
+            renameNoteDialog.kind = "folder";
+            renameNoteDialog.notePath = folder;
+            renameNoteDialog.fileName = folder;
+            renameNoteDialog.open();
+        }
+        onDeleteFolderRequested: function(folder) {
+            deleteNoteDialog.notePath = folder;
+            deleteNoteDialog.noteTitle = folder;
+            deleteNoteDialog.isFolder = true;
+            deleteNoteDialog.open();
         }
     }
 

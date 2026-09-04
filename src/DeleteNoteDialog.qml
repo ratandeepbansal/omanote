@@ -6,6 +6,7 @@ Dialog {
 
     property string noteTitle: ""
     property string notePath: ""
+    property bool isFolder: false
     property bool darkMode: true
     property color textColor: darkMode ? "#d0d0d0" : "#42464c"
     property color strongTextColor: darkMode ? "#eeeeee" : "#222324"
@@ -36,7 +37,7 @@ Dialog {
         spacing: 12
 
         Label {
-            text: "Delete note"
+            text: root.isFolder ? "Delete folder" : "Delete note"
             color: root.strongTextColor
             font.family: "iA Writer Mono S"
             font.pixelSize: Math.round(16 * root.textScale)
@@ -45,7 +46,9 @@ Dialog {
 
         Label {
             width: parent.width
-            text: "Move \"" + root.noteTitle + "\" to the trash?"
+            text: root.isFolder
+                ? "Move the folder \"" + root.noteTitle + "\" and every note in it to the trash?"
+                : "Move \"" + root.noteTitle + "\" to the trash?"
             color: root.textColor
             wrapMode: Text.Wrap
             font.family: "iA Writer Mono S"
