@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Omanote
+GenericName=Markdown Notes
+Comment=Markdown notes with a sidebar, forked from omawrite
+Exec=omanote %f
+Icon=omanote
+Terminal=false
+Categories=Office;WordProcessor;TextEditor;
+MimeType=text/markdown;text/x-markdown;text/plain;
+Keywords=markdown;write;notes;text;editor;
+StartupWMClass=omanote
