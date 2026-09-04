@@ -1085,6 +1085,7 @@ void Backend::applyDocumentTypography() {
     QTextCursor cursor(m_document);
     cursor.select(QTextCursor::Document);
     cursor.mergeBlockFormat(blockFormat);
+    applyTableRowFormat(m_document->begin(), m_document->end());
     m_formattingTypography = false;
 
     m_document->setUndoRedoEnabled(undoEnabled);
@@ -1112,6 +1113,26 @@ void Backend::reapplyTypographyToChange() {
     cursor.setPosition(start);
     cursor.setPosition(end, QTextCursor::KeepAnchor);
     cursor.mergeBlockFormat(blockFormat);
+    applyTableRowFormat(m_document->findBlock(start), m_document->findBlock(end).next());
     cursor.endEditBlock();
     m_formattingTypography = false;
+}
+
+// Markdown table rows stay on one line instead of wrapping, so a pasted
+// spreadsheet reads as a grid; the editor scrolls sideways for wide ones.
+bool Backend::isTableRow(const QString &line) {
+    static const QRegularExpression row(QStringLiteral("^\\s*\\|.*\\|\\s*$"));
+    return row.match(line).hasMatch();
+}
+
+void Backend::applyTableRowFormat(QTextBlock from, const QTextBlock &to) {
+    for (QTextBlock block = from; block.isValid() && block != to; block = block.next()) {
+        const bool wanted = isTableRow(block.text());
+        if (block.blockFormat().nonBreakableLines() == wanted)
+            continue;
+        QTextBlockFormat format;
+        format.setNonBreakableLines(wanted);
+        QTextCursor cursor(block);
+        cursor.mergeBlockFormat(format);
+    }
 }

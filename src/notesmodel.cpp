@@ -343,6 +343,12 @@ QString NotesModel::stripMarkdown(const QString &line) {
     static const QRegularExpression quote(QStringLiteral("^>+\\s*"));
     static const QRegularExpression emphasis(QStringLiteral("(\\*{1,3}|_{1,3}|~~|`)"));
     static const QRegularExpression link(QStringLiteral("!?\\[([^\\]]*)\\]\\([^)]*\\)"));
+    static const QRegularExpression tableSeparator(QStringLiteral("^\\|?\\s*:?-+:?\\s*(\\|\\s*:?-+:?\\s*)*\\|?$"));
+    static const QRegularExpression tablePipes(QStringLiteral("^\\|\\s*|\\s*\\|$|\\s*\\|\\s*"));
+    if (tableSeparator.match(out).hasMatch())
+        return {};
+    if (out.startsWith(QLatin1Char('|')))
+        out.replace(tablePipes, QStringLiteral(" "));
     out.remove(heading);
     out.remove(bullet);
     out.remove(quote);

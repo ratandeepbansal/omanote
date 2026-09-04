@@ -691,8 +691,11 @@ ApplicationWindow {
             anchors.leftMargin: 24
             anchors.rightMargin: 24
             clip: true
-            contentWidth: width
+            // Table rows never wrap, so wide tables extend past the column and
+            // the view scrolls sideways to reach them.
+            contentWidth: Math.max(width, editor.x + editor.contentWidth + 24)
             contentHeight: Math.max(height, editor.y + (win.previewOpen ? preview.implicitHeight : editor.implicitHeight) + 220)
+            ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {
                 policy: ScrollBar.AsNeeded

@@ -34,6 +34,10 @@ private slots:
         QCOMPARE(NotesModel::titleFor(QStringLiteral("\n\n  \n"), QStringLiteral("Untitled 2.md")),
                  QStringLiteral("Untitled 2"));
         QCOMPARE(NotesModel::previewFor(QStringLiteral("Only a title")), QString());
+        QCOMPARE(NotesModel::previewFor(QStringLiteral("# T\n| a | b |\n| - | - |\n| 1 | 2 |")),
+                 QStringLiteral("a b"));
+        QVERIFY(Backend::isTableRow(QStringLiteral("| a | b |")));
+        QVERIFY(!Backend::isTableRow(QStringLiteral("a | b")));
         QCOMPARE(NotesModel::titleFor(QStringLiteral("---\ntags: [a]\n---\n# Reading list\nbooks"), QStringLiteral("r.md")),
                  QStringLiteral("Reading list"));
         QCOMPARE(NotesModel::previewFor(QStringLiteral("---\ntags: [a]\n---\n# Reading list\nbooks")),
@@ -243,6 +247,25 @@ private slots:
         QVERIFY(html.contains(QStringLiteral("<img src=\"file:///notes/assets/a-b.png\" alt=\"shot\" />")));
         QVERIFY(html.contains(QStringLiteral("<img src=\"https://x/y.png\" alt=\"\" />")));
         QVERIFY(!html.contains(QStringLiteral("OMANOTEIMG")));
+    }
+
+    void convertsGoogleSheetsClipboard() {
+        const QString html = QStringLiteral(
+            "<meta charset='utf-8'><google-sheets-html-origin><style type=\"text/css\"><!--td {border: 1px solid #cccccc;}br {mso-data-placement:same-cell;}--></style>"
+            "<table xmlns=\"http://www.w3.org/1999/xhtml\" cellspacing=\"0\" cellpadding=\"0\" dir=\"ltr\" border=\"1\" style=\"table-layout:fixed;font-size:10pt;font-family:Arial;width:0px;border-collapse:collapse;border:none\" data-sheets-root=\"1\">"
+            "<colgroup><col width=\"100\"/><col width=\"200\"/><col width=\"300\"/></colgroup><tbody>"
+            "<tr style=\"height:21px;\"><td style=\"overflow:hidden;padding:2px 3px 2px 3px;vertical-align:bottom;\" data-sheets-value=\"{&quot;1&quot;:3,&quot;3&quot;:1}\">1</td>"
+            "<td style=\"overflow:hidden;\" data-sheets-value=\"{&quot;1&quot;:2,&quot;2&quot;:&quot;5130 Script GPT&quot;}\">5130 Script GPT</td>"
+            "<td style=\"overflow:hidden;\">This is a one-to-many script writing GPT. Use the script on Whatsapp status, Insta story</td></tr>"
+            "<tr style=\"height:21px;\"><td>2</td><td>Customize Offer GPT</td><td>Use this to create offer for your services</td></tr>"
+            "</tbody></table>");
+        const QList<QStringList> rows = Backend::tableRowsFromHtml(html);
+        QCOMPARE(rows.size(), 2);
+        QCOMPARE(rows.at(0).size(), 3);
+        QCOMPARE(rows.at(1).at(1), QStringLiteral("Customize Offer GPT"));
+        const QString markdown = Backend::markdownTable(rows);
+        QVERIFY(markdown.startsWith(QStringLiteral("| 1")));
+        QCOMPARE(markdown.count(QLatin1Char('\n')), 3);
     }
 
     void convertsTables() {

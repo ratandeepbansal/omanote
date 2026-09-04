@@ -12,6 +12,7 @@
 
 class MarkdownHighlighter;
 class QTextDocument;
+class QTextBlock;
 class QWindow;
 class QLockFile;
 
@@ -105,6 +106,7 @@ public:
     static QList<QStringList> tableRowsFromMarkdown(const QString &markdown);
     static QString markdownTable(const QList<QStringList> &rows);
     static QString htmlTable(const QList<QStringList> &rows);
+    static bool isTableRow(const QString &line);
     Q_INVOKABLE bool editorTextChanged();
     Q_INVOKABLE QVariantList hiddenRangesAt(int position) const;
     Q_INVOKABLE void setSearchHighlight(const QString &query, int currentMatchStart);
@@ -145,6 +147,7 @@ private:
     void scheduleWordCount();
     void applyDocumentTypography();
     void reapplyTypographyToChange();
+    void applyTableRowFormat(QTextBlock from, const QTextBlock &to);
     void scheduleRecovery();
     void writeRecovery();
     void restoreRecovery();
