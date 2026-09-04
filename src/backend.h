@@ -88,6 +88,17 @@ public:
     // and returns the Markdown to insert, or "" when there is nothing to save.
     Q_INVOKABLE QString saveClipboardImage();
     Q_INVOKABLE QString markdownToHtml(const QString &markdown) const;
+    // Table support: a pasted HTML table or tab-separated spreadsheet range
+    // becomes a Markdown pipe table; copying a pipe table puts an HTML table on
+    // the clipboard next to the Markdown so it pastes formatted elsewhere.
+    Q_INVOKABLE QString clipboardTableMarkdown() const;
+    Q_INVOKABLE void copyTable(const QString &markdown) const;
+    Q_INVOKABLE QString formatMarkdownTable(const QString &markdown) const;
+    static QList<QStringList> tableRowsFromHtml(const QString &html);
+    static QList<QStringList> tableRowsFromTsv(const QString &text);
+    static QList<QStringList> tableRowsFromMarkdown(const QString &markdown);
+    static QString markdownTable(const QList<QStringList> &rows);
+    static QString htmlTable(const QList<QStringList> &rows);
     Q_INVOKABLE bool editorTextChanged();
     Q_INVOKABLE QVariantList hiddenRangesAt(int position) const;
     Q_INVOKABLE void setSearchHighlight(const QString &query, int currentMatchStart);

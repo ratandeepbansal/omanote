@@ -230,6 +230,27 @@ private slots:
         QVERIFY(model.createNoteTitled(QStringLiteral("Trip: Japan/2027")).endsWith(QStringLiteral(" 2.md")));
     }
 
+    void convertsTables() {
+        const QList<QStringList> fromTsv = Backend::tableRowsFromTsv(QStringLiteral("Name\tQty\nApples\t3\nPears\t12\n"));
+        QCOMPARE(fromTsv.size(), 3);
+        QCOMPARE(Backend::markdownTable(fromTsv),
+                 QStringLiteral("| Name   | Qty |\n| ------ | --- |\n| Apples | 3   |\n| Pears  | 12  |\n"));
+        QVERIFY(Backend::tableRowsFromTsv(QStringLiteral("just one line\twith tab")).isEmpty());
+        QVERIFY(Backend::tableRowsFromTsv(QStringLiteral("a\nb\n")).isEmpty());
+
+        const QList<QStringList> fromHtml = Backend::tableRowsFromHtml(
+            QStringLiteral("<html><body><table><tr><th>A</th><th>B</th></tr><tr><td>1 &amp; 2</td><td><b>x</b></td></tr></table></body></html>"));
+        QCOMPARE(fromHtml.size(), 2);
+        QCOMPARE(fromHtml.at(1), (QStringList{QStringLiteral("1 & 2"), QStringLiteral("x")}));
+
+        const QString markdown = QStringLiteral("| A | B |\n|---|:-:|\n| a\\|b | c |");
+        const QList<QStringList> parsed = Backend::tableRowsFromMarkdown(markdown);
+        QCOMPARE(parsed.size(), 2);
+        QCOMPARE(parsed.at(1).at(0), QStringLiteral("a|b"));
+        QCOMPARE(Backend::htmlTable(parsed),
+                 QStringLiteral("<table border=\"1\" cellspacing=\"0\" cellpadding=\"4\">\n<tr><th>A</th><th>B</th></tr>\n<tr><td>a|b</td><td>c</td></tr>\n</table>\n"));
+    }
+
     void autosavesNotesInsideTheNotesFolder() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());

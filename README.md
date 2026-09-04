@@ -85,6 +85,9 @@ or set `notes/folder` in `~/.config/Omacom/omanote.conf`.
 | `Ctrl+Click` on `[[Note title]]` | Open that note, creating it if it does not exist |
 | `Ctrl+V` with an image | Saves it to an `assets` folder beside the note and inserts the image link |
 | `Ctrl+Shift+V` | Toggle a rendered Markdown preview |
+| `Ctrl+V` with a spreadsheet range or HTML table | Pastes it as an aligned Markdown table |
+| `Ctrl+Shift+T` | Insert a table, or re-align the one under the caret. `Tab` moves between cells |
+| `Ctrl+Shift+C` in a table | Copy it as both Markdown and an HTML table, so it pastes formatted into mail or docs |
 | `Ctrl+P` | Print |
 | `F11` / `Super+F` | Fullscreen |
 | `Ctrl+?` | Shortcut reference |

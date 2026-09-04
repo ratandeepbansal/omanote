@@ -23,6 +23,7 @@
 #include <QLockFile>
 #include <QSaveFile>
 #include <QTextBlock>
+#include <QTextTable>
 #include <QTextBlockFormat>
 #include <QTextCursor>
 #include <QTextDocument>
@@ -443,6 +444,170 @@ QString Backend::markdownToHtml(const QString &markdown) const {
     QTextDocument document;
     document.setMarkdown(markdown, QTextDocument::MarkdownDialectGitHub);
     return document.toHtml();
+}
+
+QList<QStringList> Backend::tableRowsFromHtml(const QString &html) {
+    QList<QStringList> rows;
+    if (!html.contains(QStringLiteral("<table"), Qt::CaseInsensitive))
+        return rows;
+    QTextDocument document;
+    document.setHtml(html);
+    for (QTextBlock block = document.begin(); block.isValid(); block = block.next()) {
+        QTextCursor cursor(block);
+        QTextTable *table = cursor.currentTable();
+        if (!table)
+            continue;
+        for (int r = 0; r < table->rows(); ++r) {
+            QStringList row;
+            for (int c = 0; c < table->columns(); ++c) {
+                const QTextTableCell cell = table->cellAt(r, c);
+                QString text;
+                for (QTextFrame::iterator it = cell.begin(); !it.atEnd(); ++it) {
+                    if (it.currentBlock().isValid())
+                        text += it.currentBlock().text() + QLatin1Char(' ');
+                }
+                row.append(text.simplified());
+            }
+            rows.append(row);
+        }
+        break; // first table only
+    }
+    return rows;
+}
+
+QList<QStringList> Backend::tableRowsFromTsv(const QString &text) {
+    QList<QStringList> rows;
+    const QStringList lines = text.split(QRegularExpression(QStringLiteral("\r?\n")));
+    for (const QString &line : lines) {
+        if (line.trimmed().isEmpty())
+            continue;
+        if (!line.contains(QLatin1Char('\t')))
+            return {};
+        QStringList cells = line.split(QLatin1Char('\t'));
+        for (QString &cell : cells)
+            cell = cell.trimmed();
+        rows.append(cells);
+    }
+    return rows.size() >= 2 ? rows : QList<QStringList>();
+}
+
+QList<QStringList> Backend::tableRowsFromMarkdown(const QString &markdown) {
+    QList<QStringList> rows;
+    static const QRegularExpression separator(QStringLiteral("^\\s*\\|?\\s*:?-{1,}:?\\s*(\\|\\s*:?-{1,}:?\\s*)*\\|?\\s*$"));
+    for (const QString &line : markdown.split(QLatin1Char('\n'))) {
+        const QString trimmed = line.trimmed();
+        if (!trimmed.contains(QLatin1Char('|')))
+            continue;
+        if (separator.match(trimmed).hasMatch())
+            continue;
+        QString inner = trimmed;
+        if (inner.startsWith(QLatin1Char('|')))
+            inner.remove(0, 1);
+        if (inner.endsWith(QLatin1Char('|')))
+            inner.chop(1);
+        // Split on unescaped pipes only; "\|" is a literal pipe inside a cell.
+        QStringList cells;
+        QString current;
+        for (int i = 0; i < inner.size(); ++i) {
+            const QChar ch = inner.at(i);
+            if (ch == QLatin1Char('\\') && i + 1 < inner.size() && inner.at(i + 1) == QLatin1Char('|')) {
+                current += QLatin1Char('|');
+                ++i;
+            } else if (ch == QLatin1Char('|')) {
+                cells.append(current.trimmed());
+                current.clear();
+            } else {
+                current += ch;
+            }
+        }
+        cells.append(current.trimmed());
+        rows.append(cells);
+    }
+    return rows;
+}
+
+QString Backend::markdownTable(const QList<QStringList> &rows) {
+    if (rows.isEmpty())
+        return {};
+    int columns = 0;
+    for (const QStringList &row : rows)
+        columns = std::max(columns, int(row.size()));
+    if (columns == 0)
+        return {};
+    QVector<int> widths(columns, 3);
+    QList<QStringList> cells;
+    for (const QStringList &row : rows) {
+        QStringList padded = row;
+        while (padded.size() < columns)
+            padded.append(QString());
+        for (int c = 0; c < columns; ++c) {
+            padded[c] = padded[c].simplified().replace(QLatin1Char('|'), QStringLiteral("\\|"));
+            widths[c] = std::max(widths[c], int(padded[c].size()));
+        }
+        cells.append(padded);
+    }
+    QString out;
+    auto emitRow = [&](const QStringList &row) {
+        out += QLatin1Char('|');
+        for (int c = 0; c < columns; ++c)
+            out += QLatin1Char(' ') + row.at(c).leftJustified(widths[c]) + QStringLiteral(" |");
+        out += QLatin1Char('\n');
+    };
+    emitRow(cells.first());
+    out += QLatin1Char('|');
+    for (int c = 0; c < columns; ++c)
+        out += QLatin1Char(' ') + QString(widths[c], QLatin1Char('-')) + QStringLiteral(" |");
+    out += QLatin1Char('\n');
+    for (int r = 1; r < cells.size(); ++r)
+        emitRow(cells.at(r));
+    return out;
+}
+
+QString Backend::htmlTable(const QList<QStringList> &rows) {
+    if (rows.isEmpty())
+        return {};
+    QString out = QStringLiteral("<table border=\"1\" cellspacing=\"0\" cellpadding=\"4\">\n");
+    for (int r = 0; r < rows.size(); ++r) {
+        out += QStringLiteral("<tr>");
+        const QString tag = r == 0 ? QStringLiteral("th") : QStringLiteral("td");
+        for (const QString &cell : rows.at(r))
+            out += QStringLiteral("<%1>%2</%1>").arg(tag, cell.toHtmlEscaped());
+        out += QStringLiteral("</tr>\n");
+    }
+    out += QStringLiteral("</table>\n");
+    return out;
+}
+
+QString Backend::clipboardTableMarkdown() const {
+    const QClipboard *clipboard = QGuiApplication::clipboard();
+    const QMimeData *mimeData = clipboard ? clipboard->mimeData() : nullptr;
+    if (!mimeData)
+        return {};
+    QList<QStringList> rows;
+    if (mimeData->hasHtml())
+        rows = tableRowsFromHtml(mimeData->html());
+    if (rows.isEmpty() && mimeData->hasText())
+        rows = tableRowsFromTsv(mimeData->text());
+    return markdownTable(rows);
+}
+
+QString Backend::formatMarkdownTable(const QString &markdown) const {
+    QString out = markdownTable(tableRowsFromMarkdown(markdown));
+    if (out.endsWith(QLatin1Char('\n')))
+        out.chop(1);
+    return out;
+}
+
+void Backend::copyTable(const QString &markdown) const {
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    if (!clipboard)
+        return;
+    const QList<QStringList> rows = tableRowsFromMarkdown(markdown);
+    auto *mimeData = new QMimeData;
+    mimeData->setText(markdown);
+    if (!rows.isEmpty())
+        mimeData->setHtml(htmlTable(rows));
+    clipboard->setMimeData(mimeData);
 }
 
 bool Backend::editorTextChanged() {

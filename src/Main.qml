@@ -308,6 +308,21 @@ ApplicationWindow {
     }
 
     Shortcut {
+        sequence: "Ctrl+Shift+T"
+        context: Qt.ApplicationShortcut
+        onActivated: editor.formatOrInsertTable()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+C"
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            if (!editor.copyTableAtCursor())
+                editor.copy();
+        }
+    }
+
+    Shortcut {
         sequence: "Ctrl+Shift+V"
         context: Qt.ApplicationShortcut
         onActivated: {
@@ -557,7 +572,7 @@ ApplicationWindow {
         standardButtons: Dialog.Close
         anchors.centerIn: parent
         contentItem: Label {
-            text: "Ctrl+N  New Note\nCtrl+\\  Toggle Sidebar\nCtrl+Shift+F  Search Notes\nCtrl+Alt+Up/Down  Previous/Next Note\nCtrl+Shift+P  Pin Note\nCtrl+Shift+M  Move Note to Folder\nCtrl+Shift+V  Preview\nCtrl+Enter  Toggle Checkbox\nTab / Shift+Tab  Indent List Item\nCtrl+Click [[Note]]  Follow Link\nCtrl+S  Save\nCtrl+Shift+S  Save As\nCtrl+O  Open\nCtrl+Shift+N  New Window\nCtrl+F  Find\nCtrl+H  Find and Replace\nCtrl+B  Bold\nCtrl+I  Italic\nCtrl+K  Link\nCtrl+P  Print\nF11 / Super+F  Fullscreen\nCtrl+?  Shortcuts"
+            text: "Ctrl+N  New Note\nCtrl+\\  Toggle Sidebar\nCtrl+Shift+F  Search Notes\nCtrl+Alt+Up/Down  Previous/Next Note\nCtrl+Shift+P  Pin Note\nCtrl+Shift+M  Move Note to Folder\nCtrl+Shift+V  Preview\nCtrl+Shift+T  Insert / Format Table\nCtrl+Shift+C  Copy Table with Formatting\nCtrl+Enter  Toggle Checkbox\nTab / Shift+Tab  Indent List Item\nCtrl+Click [[Note]]  Follow Link\nCtrl+S  Save\nCtrl+Shift+S  Save As\nCtrl+O  Open\nCtrl+Shift+N  New Window\nCtrl+F  Find\nCtrl+H  Find and Replace\nCtrl+B  Bold\nCtrl+I  Italic\nCtrl+K  Link\nCtrl+P  Print\nF11 / Super+F  Fullscreen\nCtrl+?  Shortcuts"
             lineHeight: 1.5
         }
     }
@@ -1122,6 +1137,93 @@ ApplicationWindow {
                     return true;
                 }
 
+                function pasteClipboardTable() {
+                    var markdown = backend.clipboardTableMarkdown();
+                    if (markdown === "")
+                        return false;
+                    var range = currentLineRange();
+                    var prefix = range.line.slice(0, cursorPosition - range.start).trim().length > 0 ? "\n" : "";
+                    replaceSelectionWith(prefix + markdown);
+                    return true;
+                }
+
+                // The contiguous block of pipe-table lines around the caret.
+                function tableRangeAtCursor() {
+                    var lines = text.split("\n");
+                    var pos = 0, idx = 0;
+                    for (; idx < lines.length; idx++) {
+                        if (cursorPosition <= pos + lines[idx].length)
+                            break;
+                        pos += lines[idx].length + 1;
+                    }
+                    if (idx >= lines.length)
+                        idx = lines.length - 1;
+                    var isRow = function(l) { return /^\s*\|.*\|\s*$/.test(l); };
+                    if (!isRow(lines[idx]))
+                        return null;
+                    var first = idx, last = idx;
+                    while (first > 0 && isRow(lines[first - 1])) first--;
+                    while (last < lines.length - 1 && isRow(lines[last + 1])) last++;
+                    var start = 0;
+                    for (var i = 0; i < first; i++) start += lines[i].length + 1;
+                    var end = start;
+                    for (var j = first; j <= last; j++) end += lines[j].length + (j < last ? 1 : 0);
+                    return { start: start, end: end, markdown: text.slice(start, end), lineIndex: idx - first };
+                }
+
+                function copyTableAtCursor() {
+                    var range = tableRangeAtCursor();
+                    if (!range)
+                        return false;
+                    backend.copyTable(range.markdown);
+                    return true;
+                }
+
+                // Ctrl+Shift+T: re-align the table under the caret, or insert a new one.
+                function formatOrInsertTable() {
+                    var range = tableRangeAtCursor();
+                    if (range) {
+                        var formatted = backend.formatMarkdownTable(range.markdown);
+                        if (formatted !== "" && formatted !== range.markdown) {
+                            EditorMutations.replaceRange(editor, range.start, range.end, formatted);
+                            cursorPosition = range.start;
+                        }
+                        return;
+                    }
+                    var line = currentLineRange();
+                    var prefix = line.line.length > 0 ? "\n" : "";
+                    var table = "| Column | Column |\n| ------ | ------ |\n|        |        |\n";
+                    var start = cursorPosition + prefix.length;
+                    replaceSelectionWith(prefix + table);
+                    select(start + 2, start + 8);
+                }
+
+                // Tab inside a table row jumps to the next cell (Shift+Tab: previous).
+                function moveTableCell(backwards) {
+                    var range = tableRangeAtCursor();
+                    if (!range)
+                        return false;
+                    var pipes = [];
+                    for (var i = range.start; i < range.end; i++) {
+                        if (text[i] === "|" && text[i - 1] !== "\\")
+                            pipes.push(i);
+                    }
+                    var target = -1;
+                    if (backwards) {
+                        for (var b = pipes.length - 1; b >= 1; b--) {
+                            if (pipes[b] < cursorPosition - 1) { target = pipes[b - 1] + 2; break; }
+                        }
+                    } else {
+                        for (var f = 0; f < pipes.length - 1; f++) {
+                            if (pipes[f] >= cursorPosition) { target = pipes[f] + 2; break; }
+                        }
+                    }
+                    if (target < 0)
+                        return false;
+                    cursorPosition = Math.min(target, text.length);
+                    return true;
+                }
+
                 function pasteClipboardImage() {
                     if (!backend.clipboardHasImage())
                         return false;
@@ -1141,7 +1243,8 @@ ApplicationWindow {
                         && (event.modifiers & Qt.ShiftModifier)
                         && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier));
                     if (pasteKey || shiftInsert) {
-                        if (!pasteClipboardImage() && !pasteClipboardUrlAsMarkdownLink())
+                        if (!pasteClipboardImage() && !pasteClipboardTable()
+                                && !pasteClipboardUrlAsMarkdownLink())
                             pasteClipboardAsPlainText();
                         event.accepted = true;
                         return;
@@ -1156,7 +1259,8 @@ ApplicationWindow {
                         return;
                     }
                     if (!commandModifier && (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab)) {
-                        if (indentListLine(event.key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier))) {
+                        var back = event.key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier);
+                        if (moveTableCell(back) || indentListLine(back)) {
                             event.accepted = true;
                             return;
                         }
