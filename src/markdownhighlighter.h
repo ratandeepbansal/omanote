@@ -54,6 +54,7 @@ private:
     QTextCharFormat m_quoteFormat;
     QTextCharFormat m_linkFormat;
     QTextCharFormat m_tagFormat;
+    QTextCharFormat m_doneFormat;
     QString m_searchQuery;
     int m_currentMatchStart = -1;
     QTextCharFormat m_searchFormat;

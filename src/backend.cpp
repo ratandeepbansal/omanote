@@ -1,6 +1,8 @@
 #include "backend.h"
 
 #include <QClipboard>
+#include <QDateTime>
+#include <QImage>
 #include <QColor>
 #include <QCoreApplication>
 #include <QDir>
@@ -405,6 +407,42 @@ QString Backend::clipboardText() const {
 
     const QMimeData *mimeData = clipboard->mimeData();
     return mimeData && mimeData->hasText() ? mimeData->text() : QString();
+}
+
+bool Backend::clipboardHasImage() const {
+    const QClipboard *clipboard = QGuiApplication::clipboard();
+    const QMimeData *mimeData = clipboard ? clipboard->mimeData() : nullptr;
+    return mimeData && mimeData->hasImage() && !mimeData->hasText();
+}
+
+QString Backend::saveClipboardImage() {
+    const QClipboard *clipboard = QGuiApplication::clipboard();
+    if (!clipboard)
+        return {};
+    const QImage image = clipboard->image();
+    if (image.isNull())
+        return {};
+    const QString notePath = filePath();
+    const QString baseDir = notePath.isEmpty() ? m_notesDir : QFileInfo(notePath).absolutePath();
+    if (baseDir.isEmpty())
+        return {};
+    const QDir assets(QDir(baseDir).filePath(QStringLiteral("assets")));
+    if (!QDir().mkpath(assets.absolutePath()))
+        return {};
+    QString stem = notePath.isEmpty() ? QStringLiteral("image")
+                                      : QFileInfo(notePath).completeBaseName();
+    stem.replace(QRegularExpression(QStringLiteral("[^\\w-]+")), QStringLiteral("-"));
+    const QString name = QStringLiteral("%1-%2.png")
+        .arg(stem, QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss")));
+    if (!image.save(assets.filePath(name), "PNG"))
+        return {};
+    return QStringLiteral("![](assets/%1)").arg(name);
+}
+
+QString Backend::markdownToHtml(const QString &markdown) const {
+    QTextDocument document;
+    document.setMarkdown(markdown, QTextDocument::MarkdownDialectGitHub);
+    return document.toHtml();
 }
 
 bool Backend::editorTextChanged() {

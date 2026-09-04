@@ -39,6 +39,7 @@ ApplicationWindow {
     property bool replaceOpen: false
     property bool awaitingPendingSave: false
     property bool sidebarOpen: backend.setting("sidebar/open", true)
+    property bool previewOpen: false
     property int sidebarWidth: backend.setting("sidebar/width", 260)
     readonly property int sidebarMinWidth: scaledSize(200)
     readonly property int sidebarMaxWidth: Math.round(width * 0.4)
@@ -307,6 +308,16 @@ ApplicationWindow {
     }
 
     Shortcut {
+        sequence: "Ctrl+Shift+V"
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            win.previewOpen = !win.previewOpen;
+            if (!win.previewOpen)
+                editor.forceActiveFocus();
+        }
+    }
+
+    Shortcut {
         sequence: "Ctrl+Shift+M"
         context: Qt.ApplicationShortcut
         onActivated: {
@@ -546,7 +557,7 @@ ApplicationWindow {
         standardButtons: Dialog.Close
         anchors.centerIn: parent
         contentItem: Label {
-            text: "Ctrl+N  New Note\nCtrl+\\  Toggle Sidebar\nCtrl+Shift+F  Search Notes\nCtrl+Alt+Up/Down  Previous/Next Note\nCtrl+Shift+P  Pin Note\nCtrl+Shift+M  Move Note to Folder\nCtrl+S  Save\nCtrl+Shift+S  Save As\nCtrl+O  Open\nCtrl+Shift+N  New Window\nCtrl+F  Find\nCtrl+H  Find and Replace\nCtrl+B  Bold\nCtrl+I  Italic\nCtrl+K  Link\nCtrl+P  Print\nF11 / Super+F  Fullscreen\nCtrl+?  Shortcuts"
+            text: "Ctrl+N  New Note\nCtrl+\\  Toggle Sidebar\nCtrl+Shift+F  Search Notes\nCtrl+Alt+Up/Down  Previous/Next Note\nCtrl+Shift+P  Pin Note\nCtrl+Shift+M  Move Note to Folder\nCtrl+Shift+V  Preview\nCtrl+Enter  Toggle Checkbox\nTab / Shift+Tab  Indent List Item\nCtrl+Click [[Note]]  Follow Link\nCtrl+S  Save\nCtrl+Shift+S  Save As\nCtrl+O  Open\nCtrl+Shift+N  New Window\nCtrl+F  Find\nCtrl+H  Find and Replace\nCtrl+B  Bold\nCtrl+I  Italic\nCtrl+K  Link\nCtrl+P  Print\nF11 / Super+F  Fullscreen\nCtrl+?  Shortcuts"
             lineHeight: 1.5
         }
     }
@@ -646,7 +657,7 @@ ApplicationWindow {
             anchors.rightMargin: 24
             clip: true
             contentWidth: width
-            contentHeight: Math.max(height, editor.y + editor.implicitHeight + 220)
+            contentHeight: Math.max(height, editor.y + (win.previewOpen ? preview.implicitHeight : editor.implicitHeight) + 220)
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {
                 policy: ScrollBar.AsNeeded
@@ -832,6 +843,7 @@ ApplicationWindow {
             TextEdit {
                 id: editor
                 objectName: "sourceEditor"
+                visible: !win.previewOpen
                 x: Math.round((editorFlick.width - width) / 2)
                 y: Math.max(42, Math.round(win.height * 0.05))
                 width: win.editorWidth
@@ -911,16 +923,17 @@ ApplicationWindow {
                         replaceSelectionWith("\n");
                         return;
                     }
-                    var match = line.match(/^(\s*)([-+*]|\d+[.)]|>+)\s+(.*)$/);
+                    var match = line.match(/^(\s*)([-+*]|\d+[.)]|>+)\s+(\[[ xX]\]\s*)?(.*)$/);
                     if (match) {
-                        if (match[3].length === 0) {
+                        if (match[4].length === 0) {
                             EditorMutations.replaceRange(editor, lineStart,
                                                          cursorPosition, "\n");
                         } else {
                             var marker = match[2];
                             if (/^\d/.test(marker))
                                 marker = (parseInt(marker) + 1) + marker.slice(-1);
-                            replaceSelectionWith("\n" + match[1] + marker + " ");
+                            var box = match[3] ? "[ ] " : "";
+                            replaceSelectionWith("\n" + match[1] + marker + " " + box);
                         }
                         return;
                     }
@@ -1031,6 +1044,94 @@ ApplicationWindow {
                     return true;
                 }
 
+                function currentLineRange() {
+                    var start = text.lastIndexOf("\n", cursorPosition - 1) + 1;
+                    var end = text.indexOf("\n", cursorPosition);
+                    if (end < 0)
+                        end = text.length;
+                    return { start: start, end: end, line: text.slice(start, end) };
+                }
+
+                // Ctrl+Enter: toggle "- [ ]" <-> "- [x]"; a plain list item or bare
+                // line gets a checkbox added.
+                function toggleChecklist() {
+                    var range = currentLineRange();
+                    var caret = cursorPosition;
+                    var m = range.line.match(/^(\s*(?:[-+*]|\d+[.)])\s+)\[([ xX])\](\s.*|$)/);
+                    var replacement;
+                    if (m) {
+                        replacement = m[1] + "[" + (m[2] === " " ? "x" : " ") + "]" + m[3];
+                    } else {
+                        var bullet = range.line.match(/^(\s*(?:[-+*]|\d+[.)])\s+)(.*)$/);
+                        replacement = bullet ? bullet[1] + "[ ] " + bullet[2]
+                                             : "- [ ] " + range.line.replace(/^\s*/, "");
+                        caret += replacement.length - range.line.length;
+                    }
+                    EditorMutations.replaceRange(editor, range.start, range.end, replacement);
+                    cursorPosition = Math.max(range.start, Math.min(text.length, caret));
+                }
+
+                // Tab / Shift+Tab on a list line indents or outdents it.
+                function indentListLine(outdent) {
+                    var range = currentLineRange();
+                    if (!/^\s*([-+*]|\d+[.)])\s/.test(range.line))
+                        return false;
+                    var caret = cursorPosition;
+                    var replacement;
+                    if (outdent) {
+                        var lead = range.line.match(/^( {1,2}|\t)/);
+                        if (!lead)
+                            return true;
+                        replacement = range.line.slice(lead[1].length);
+                        caret -= lead[1].length;
+                    } else {
+                        replacement = "  " + range.line;
+                        caret += 2;
+                    }
+                    EditorMutations.replaceRange(editor, range.start, range.end, replacement);
+                    cursorPosition = Math.max(range.start, Math.min(text.length, caret));
+                    return true;
+                }
+
+                // [[Title]] under the given text position, or "".
+                function wikiLinkAt(position) {
+                    var lineStart = text.lastIndexOf("\n", position - 1) + 1;
+                    var lineEnd = text.indexOf("\n", position);
+                    if (lineEnd < 0)
+                        lineEnd = text.length;
+                    var line = text.slice(lineStart, lineEnd);
+                    var re = /\[\[([^\[\]]+)\]\]/g;
+                    var m;
+                    while ((m = re.exec(line)) !== null) {
+                        var s = lineStart + m.index;
+                        if (position >= s && position <= s + m[0].length)
+                            return m[1].trim();
+                    }
+                    return "";
+                }
+
+                function followWikiLink(title) {
+                    if (title === "")
+                        return false;
+                    var target = notesModel.pathForTitle(title);
+                    if (target === "")
+                        target = notesModel.createNoteTitled(title);
+                    if (target === "")
+                        return false;
+                    win.openNote(target);
+                    return true;
+                }
+
+                function pasteClipboardImage() {
+                    if (!backend.clipboardHasImage())
+                        return false;
+                    var markdown = backend.saveClipboardImage();
+                    if (markdown === "")
+                        return false;
+                    replaceSelectionWith(markdown);
+                    return true;
+                }
+
                 Keys.priority: Keys.BeforeItem
                 Keys.onPressed: function(event) {
                     var pasteKey = (event.key === Qt.Key_V)
@@ -1040,7 +1141,7 @@ ApplicationWindow {
                         && (event.modifiers & Qt.ShiftModifier)
                         && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier));
                     if (pasteKey || shiftInsert) {
-                        if (!pasteClipboardUrlAsMarkdownLink())
+                        if (!pasteClipboardImage() && !pasteClipboardUrlAsMarkdownLink())
                             pasteClipboardAsPlainText();
                         event.accepted = true;
                         return;
@@ -1048,6 +1149,18 @@ ApplicationWindow {
 
                     var returnKey = event.key === Qt.Key_Return || event.key === Qt.Key_Enter;
                     var commandModifier = event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier);
+                    if (returnKey && (event.modifiers & Qt.ControlModifier)
+                            && !(event.modifiers & (Qt.AltModifier | Qt.MetaModifier | Qt.ShiftModifier))) {
+                        toggleChecklist();
+                        event.accepted = true;
+                        return;
+                    }
+                    if (!commandModifier && (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab)) {
+                        if (indentListLine(event.key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier))) {
+                            event.accepted = true;
+                            return;
+                        }
+                    }
                     if (returnKey && !commandModifier) {
                         smartReturn(event.modifiers & Qt.ShiftModifier);
                         event.accepted = true;
@@ -1093,6 +1206,50 @@ ApplicationWindow {
                     backend.attachDocument(textDocument);
                     forceActiveFocus();
                 }
+
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: (pressedButtons === 0 && (editor.hoverLinkTitle !== "")) ? Qt.PointingHandCursor : Qt.IBeamCursor
+                    hoverEnabled: true
+                    onPositionChanged: function(mouse) {
+                        editor.hoverLinkTitle = (mouse.modifiers & Qt.ControlModifier)
+                            ? editor.wikiLinkAt(editor.positionAt(mouse.x, mouse.y)) : "";
+                    }
+                    onExited: editor.hoverLinkTitle = ""
+                    onPressed: function(mouse) {
+                        if (!(mouse.modifiers & Qt.ControlModifier)) {
+                            mouse.accepted = false;
+                            return;
+                        }
+                        var title = editor.wikiLinkAt(editor.positionAt(mouse.x, mouse.y));
+                        if (title === "" || !editor.followWikiLink(title))
+                            mouse.accepted = false;
+                    }
+                }
+                property string hoverLinkTitle: ""
+            }
+
+            // Rendered Markdown preview (Ctrl+Shift+V). Read-only, same width
+            // and colours as the editor; hidden by default.
+            TextEdit {
+                id: preview
+                visible: win.previewOpen
+                x: editor.x
+                y: editor.y
+                width: editor.width
+                readOnly: true
+                selectByMouse: true
+                textFormat: TextEdit.MarkdownText
+                wrapMode: TextEdit.Wrap
+                color: win.textColor
+                selectedTextColor: win.strongTextColor
+                selectionColor: win.selectionFill
+                font.family: "iA Writer Mono S"
+                font.pixelSize: win.editorFontPixelSize
+                text: visible ? editor.text : ""
+                baseUrl: backend.fileUrl
+                onLinkActivated: function(link) { backend.openExternalUrl(link) }
             }
         }
 

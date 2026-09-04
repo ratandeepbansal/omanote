@@ -83,6 +83,11 @@ public:
     Q_INVOKABLE void newWindow();
     Q_INVOKABLE QString clipboardUrl() const;
     Q_INVOKABLE QString clipboardText() const;
+    Q_INVOKABLE bool clipboardHasImage() const;
+    // Saves the clipboard image beside the current note (in an "assets" folder)
+    // and returns the Markdown to insert, or "" when there is nothing to save.
+    Q_INVOKABLE QString saveClipboardImage();
+    Q_INVOKABLE QString markdownToHtml(const QString &markdown) const;
     Q_INVOKABLE bool editorTextChanged();
     Q_INVOKABLE QVariantList hiddenRangesAt(int position) const;
     Q_INVOKABLE void setSearchHighlight(const QString &query, int currentMatchStart);

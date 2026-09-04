@@ -80,6 +80,11 @@ or set `notes/folder` in `~/.config/Omacom/omanote.conf`.
 | `Ctrl+S` / `Ctrl+Shift+S` | Save / save as, for files outside the notes folder |
 | `Ctrl+F` / `Ctrl+H` | Find / find and replace |
 | `Ctrl+B` / `Ctrl+I` / `Ctrl+K` | Bold / italic / link |
+| `Ctrl+Enter` | Toggle a `- [ ]` checkbox on the current line. Done items are struck through |
+| `Tab` / `Shift+Tab` | Indent / outdent a list item. Enter continues lists and checklists |
+| `Ctrl+Click` on `[[Note title]]` | Open that note, creating it if it does not exist |
+| `Ctrl+V` with an image | Saves it to an `assets` folder beside the note and inserts the image link |
+| `Ctrl+Shift+V` | Toggle a rendered Markdown preview |
 | `Ctrl+P` | Print |
 | `F11` / `Super+F` | Fullscreen |
 | `Ctrl+?` | Shortcut reference |

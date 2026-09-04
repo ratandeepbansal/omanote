@@ -34,7 +34,7 @@ and deletion.
 
 - Notebooks. (v0.2 shipped folders as one level of subdirectories, and tags as `#tag` text / front matter.)
 - Sync, cloud, or accounts.
-- Rich text, attachments, images, checklists rendering.
+- Rich text. (v0.2 added image paste into `assets/`, checklist toggling, and a read-only preview.)
 - Multi-window note library (Ctrl+N still opens a new window, sharing the same folder).
 - Rewriting the editor. The editing surface stays omawrite's.
 

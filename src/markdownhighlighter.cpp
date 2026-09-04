@@ -99,6 +99,10 @@ void MarkdownHighlighter::rebuildFormats() {
     m_tagFormat = QTextCharFormat();
     m_tagFormat.setForeground(link);
 
+    m_doneFormat = QTextCharFormat();
+    m_doneFormat.setForeground(marker);
+    m_doneFormat.setFontStrikeOut(true);
+
     m_searchFormat = QTextCharFormat();
     m_searchFormat.setBackground(m_darkMode ? QColor(QStringLiteral("#725b18"))
                                             : QColor(QStringLiteral("#ffe58a")));
@@ -111,7 +115,8 @@ void MarkdownHighlighter::highlightBlock(const QString &text) {
     if (!text.isEmpty()) {
         highlightMarkers(text);
         if (text.contains(QLatin1Char('`')) || text.contains(QLatin1Char('*'))
-            || text.contains(QLatin1Char('_')) || text.contains(QLatin1Char('['))) {
+            || text.contains(QLatin1Char('_')) || text.contains(QLatin1Char('['))
+            || text.contains(QLatin1Char('#'))) {
             highlightInline(text);
         }
     }
@@ -168,8 +173,18 @@ void MarkdownHighlighter::highlightMarkers(const QString &text) {
         static const QRegularExpression listRe(
             QStringLiteral("^(\\s*(?:[-+*]|\\d+[.)])\\s+)(.*)$"));
         const QRegularExpressionMatch list = listRe.match(text);
-        if (list.hasMatch())
+        if (list.hasMatch()) {
             setFormat(0, list.capturedLength(1), m_markerFormat);
+            // Checklist items: "[ ]" / "[x]" after the bullet; done items are struck through.
+            static const QRegularExpression checkRe(QStringLiteral("^\\[([ xX])\\]\\s"));
+            const QRegularExpressionMatch check = checkRe.match(list.captured(2));
+            if (check.hasMatch()) {
+                const int boxStart = list.capturedStart(2);
+                setFormat(boxStart, 3, check.captured(1) == QLatin1Char(' ') ? m_markerFormat : m_tagFormat);
+                if (check.captured(1) != QLatin1Char(' '))
+                    setFormat(boxStart + 4, text.length() - boxStart - 4, m_doneFormat);
+            }
+        }
     }
 
     if (firstChar == QLatin1Char('-') || firstChar == QLatin1Char('*')
@@ -198,6 +213,18 @@ void MarkdownHighlighter::highlightInline(const QString &text) {
         while (tagMatches.hasNext()) {
             const QRegularExpressionMatch match = tagMatches.next();
             setFormat(match.capturedStart(0), match.capturedLength(0), m_tagFormat);
+        }
+    }
+
+    // [[Wiki links]] to other notes.
+    if (text.contains(QStringLiteral("[["))) {
+        static const QRegularExpression wikiRe(QStringLiteral("\\[\\[([^\\[\\]]+)\\]\\]"));
+        QRegularExpressionMatchIterator wikiMatches = wikiRe.globalMatch(text);
+        while (wikiMatches.hasNext()) {
+            const QRegularExpressionMatch match = wikiMatches.next();
+            setFormat(match.capturedStart(0), 2, m_markerFormat);
+            setFormat(match.capturedStart(1), match.capturedLength(1), m_linkFormat);
+            setFormat(match.capturedEnd(1), 2, m_markerFormat);
         }
     }
 

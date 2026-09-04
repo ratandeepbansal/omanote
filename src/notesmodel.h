@@ -80,6 +80,9 @@ public:
     Q_INVOKABLE bool removeFolder(const QString &folder);
     Q_INVOKABLE bool moveNote(const QString &path, const QString &folder);
     Q_INVOKABLE QString folderOf(const QString &path) const;
+    // [[Wiki link]] target: the note whose title (or file name) matches, or ""
+    Q_INVOKABLE QString pathForTitle(const QString &title) const;
+    Q_INVOKABLE QString createNoteTitled(const QString &title);
     Q_INVOKABLE int countInFolder(const QString &folder) const;
     Q_INVOKABLE bool removeNote(const QString &path);
     Q_INVOKABLE bool renameNote(const QString &path, const QString &newFileName);

@@ -210,6 +210,26 @@ private slots:
         QCOMPARE(model.data(model.index(0), NotesModel::TagsRole).toStringList(), QStringList{QStringLiteral("work")});
     }
 
+    void resolvesWikiLinkTitles() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QFile file(dir.filePath(QStringLiteral("ideas.md")));
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
+        file.write("# Big Ideas\n");
+        file.close();
+
+        NotesModel model;
+        model.setNotesDir(dir.path());
+        QCOMPARE(model.pathForTitle(QStringLiteral("big ideas")), dir.filePath(QStringLiteral("ideas.md")));
+        QCOMPARE(model.pathForTitle(QStringLiteral("Ideas")), dir.filePath(QStringLiteral("ideas.md")));
+        QCOMPARE(model.pathForTitle(QStringLiteral("nope")), QString());
+
+        const QString created = model.createNoteTitled(QStringLiteral("Trip: Japan/2027"));
+        QVERIFY(created.endsWith(QStringLiteral("Trip- Japan-2027.md")));
+        QCOMPARE(model.pathForTitle(QStringLiteral("Trip: Japan/2027")), created);
+        QVERIFY(model.createNoteTitled(QStringLiteral("Trip: Japan/2027")).endsWith(QStringLiteral(" 2.md")));
+    }
+
     void autosavesNotesInsideTheNotesFolder() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());

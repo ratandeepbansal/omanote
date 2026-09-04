@@ -574,6 +574,43 @@ QString NotesModel::folderOf(const QString &path) const {
     return {};
 }
 
+QString NotesModel::pathForTitle(const QString &title) const {
+    const QString wanted = title.trimmed();
+    if (wanted.isEmpty())
+        return {};
+    for (const Note &note : m_notes) {
+        if (note.title.compare(wanted, Qt::CaseInsensitive) == 0)
+            return note.path;
+    }
+    for (const Note &note : m_notes) {
+        if (QFileInfo(note.fileName).completeBaseName().compare(wanted, Qt::CaseInsensitive) == 0)
+            return note.path;
+    }
+    return {};
+}
+
+QString NotesModel::createNoteTitled(const QString &title) {
+    if (m_notesDir.isEmpty())
+        return {};
+    QString stem = title.trimmed();
+    stem.replace(QRegularExpression(QStringLiteral("[/\\\\:*?\"<>|]+")), QStringLiteral("-"));
+    if (stem.isEmpty())
+        return createNote();
+    const QDir dir(m_folder.isEmpty() ? m_notesDir : QDir(m_notesDir).filePath(m_folder));
+    QDir().mkpath(dir.absolutePath());
+    QString path = dir.filePath(stem + QStringLiteral(".md"));
+    for (int n = 2; QFileInfo::exists(path); ++n)
+        path = dir.filePath(QStringLiteral("%1 %2.md").arg(stem).arg(n));
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+        return {};
+    file.write(QStringLiteral("# %1\n\n").arg(title.trimmed()).toUtf8());
+    if (!file.commit())
+        return {};
+    refresh();
+    return path;
+}
+
 int NotesModel::countInFolder(const QString &folder) const {
     return std::count_if(m_notes.cbegin(), m_notes.cend(),
                          [&folder](const Note &note) { return folder.isEmpty() || note.folder == folder; });
