@@ -611,6 +611,24 @@ QString NotesModel::createNoteTitled(const QString &title) {
     return path;
 }
 
+QString NotesModel::dailyNotePath(const QDate &date) {
+    if (m_notesDir.isEmpty())
+        return {};
+    const QDir dir(QDir(m_notesDir).filePath(QStringLiteral("Daily")));
+    QDir().mkpath(dir.absolutePath());
+    const QString path = dir.filePath(date.toString(Qt::ISODate) + QStringLiteral(".md"));
+    if (!QFileInfo::exists(path)) {
+        QSaveFile file(path);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+            return {};
+        file.write(QStringLiteral("# %1\n\n").arg(QLocale::c().toString(date, QStringLiteral("dddd, MMMM d, yyyy"))).toUtf8());
+        if (!file.commit())
+            return {};
+        refresh();
+    }
+    return path;
+}
+
 int NotesModel::countInFolder(const QString &folder) const {
     return std::count_if(m_notes.cbegin(), m_notes.cend(),
                          [&folder](const Note &note) { return folder.isEmpty() || note.folder == folder; });

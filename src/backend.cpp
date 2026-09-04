@@ -13,6 +13,7 @@
 #include <QMimeData>
 #include <QProcess>
 #include <QPrintDialog>
+#include <QFileDialog>
 #include <QPrinter>
 #include <QQuickTextDocument>
 #include <QRegularExpression>
@@ -370,9 +371,52 @@ void Backend::printDocument() {
     }
 }
 
+void Backend::exportDocument() {
+    if (!m_document) {
+        setStatus(QStringLiteral("There is no document to export."));
+        return;
+    }
+    const QString stem = QFileInfo(fileName()).completeBaseName();
+    const QString startDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    QString selectedFilter;
+    const QString target = QFileDialog::getSaveFileName(
+        nullptr, QStringLiteral("Export %1").arg(fileName()),
+        QDir(startDir).filePath(stem + QStringLiteral(".pdf")),
+        QStringLiteral("PDF (*.pdf);;HTML (*.html)"), &selectedFilter);
+    if (target.isEmpty())
+        return;
+    QTextDocument rendered;
+    rendered.setDefaultFont(m_document->defaultFont());
+    rendered.setMarkdown(currentDocumentText(), QTextDocument::MarkdownDialectGitHub);
+    const bool html = target.endsWith(QStringLiteral(".html"), Qt::CaseInsensitive)
+        || target.endsWith(QStringLiteral(".htm"), Qt::CaseInsensitive)
+        || (selectedFilter.startsWith(QStringLiteral("HTML")) && !target.endsWith(QStringLiteral(".pdf"), Qt::CaseInsensitive));
+    if (html) {
+        QSaveFile file(target);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Text) || file.write(rendered.toHtml().toUtf8()) < 0 || !file.commit()) {
+            setStatus(QStringLiteral("Could not write %1.").arg(QFileInfo(target).fileName()));
+            return;
+        }
+    } else {
+        QPrinter printer(QPrinter::HighResolution);
+        printer.setOutputFormat(QPrinter::PdfFormat);
+        printer.setOutputFileName(target);
+        rendered.print(&printer);
+    }
+    setStatus(QStringLiteral("Exported %1.").arg(QFileInfo(target).fileName()));
+}
+
+void Backend::raiseWindow() {
+    if (!m_parentWindow)
+        return;
+    m_parentWindow->show();
+    m_parentWindow->raise();
+    m_parentWindow->requestActivate();
+}
+
 void Backend::newWindow() {
     const bool started = QProcess::startDetached(QCoreApplication::applicationFilePath(),
-                                                 QStringList());
+                                                 {QStringLiteral("--new-window")});
     if (!started)
         setStatus(QStringLiteral("Could not open a new window."));
 }

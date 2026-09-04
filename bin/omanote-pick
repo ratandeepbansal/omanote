@@ -1,0 +1,34 @@
+#!/usr/bin/env sh
+# Pick a note by title from a launcher and open it in Omanote.
+# Uses walker, fuzzel, wofi, rofi or dmenu, whichever is installed.
+set -eu
+
+NOTES_DIR="${OMANOTE_DIR:-$(sed -n 's/^folder=//p' "$HOME/.config/Omacom/omanote.conf" 2>/dev/null | head -n1)}"
+NOTES_DIR="${NOTES_DIR:-$HOME/Documents/notes}"
+
+if command -v walker >/dev/null 2>&1; then MENU="walker --dmenu"
+elif command -v fuzzel >/dev/null 2>&1; then MENU="fuzzel --dmenu"
+elif command -v wofi >/dev/null 2>&1; then MENU="wofi --dmenu"
+elif command -v rofi >/dev/null 2>&1; then MENU="rofi -dmenu"
+elif command -v dmenu >/dev/null 2>&1; then MENU="dmenu"
+else echo "omanote-pick: no launcher found (walker, fuzzel, wofi, rofi, dmenu)" >&2; exit 1
+fi
+
+# "Title<TAB>path" lines: the title is the first non-empty line without leading #s.
+list() {
+  find "$NOTES_DIR" -maxdepth 2 -name '*.md' -not -path '*/assets/*' -not -path '*/.*' -printf '%T@\t%p\n' \
+    | sort -rn | cut -f2- | while IFS= read -r f; do
+      t="$(grep -m1 -v '^[[:space:]]*$' "$f" 2>/dev/null | sed 's/^#* *//' || true)"
+      [ -n "$t" ] || t="$(basename "$f" .md)"
+      printf '%s\t%s\n' "$t" "$f"
+    done
+}
+
+choice="$(list | cut -f1 | $MENU -p "Notes")" || exit 0
+[ -n "$choice" ] || exit 0
+path="$(list | awk -F'\t' -v c="$choice" '$1 == c { print $2; exit }')"
+if [ -n "$path" ]; then
+  exec omanote "$path"
+else
+  exec omanote --new "$choice"
+fi

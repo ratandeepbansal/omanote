@@ -60,6 +60,33 @@ Launch `omanote` from the app menu or a terminal. It opens on your most recent n
 the folder is empty. Pass a file path to open it directly. Pass `--notes-dir DIR` to use another folder,
 or set `notes/folder` in `~/.config/Omacom/omanote.conf`.
 
+Subfolders of the notes folder show up as folder chips in the sidebar, and any `#tag` in a note becomes
+a tag chip. Everything stays plain Markdown files on disk. Images you paste land in an `assets` folder
+beside the note.
+
+### Command line
+
+Running `omanote` again while a window is open hands the command to that window instead of starting a
+second one.
+
+```sh
+omanote --new                  # new note, cursor in the editor
+omanote --new "Call the bank"  # new note with that title
+omanote --daily                # open today's note in Daily/YYYY-MM-DD.md
+omanote --search "invoice"     # focus the sidebar search with that text
+omanote path/to/note.md        # open a file
+omanote --new-window           # force a separate window
+omanote-pick                   # pick a note by title in walker/fuzzel/wofi/rofi
+```
+
+Bind them in Omarchy by adding to `~/.config/hypr/bindings.conf`:
+
+```
+bindd = SUPER SHIFT, N, Quick note, exec, omanote --new
+bindd = SUPER SHIFT, D, Daily note, exec, omanote --daily
+bindd = SUPER SHIFT, O, Find note, exec, omanote-pick
+```
+
 ### Shortcuts
 
 | Keys | Action |
@@ -89,6 +116,7 @@ or set `notes/folder` in `~/.config/Omacom/omanote.conf`.
 | `Ctrl+Shift+T` | Insert a table, or re-align the one under the caret. `Tab` moves between cells |
 | `Ctrl+Shift+C` in a table | Copy it as both Markdown and an HTML table, so it pastes formatted into mail or docs |
 | `Ctrl+P` | Print |
+| `Ctrl+Shift+E` | Export the note as PDF or HTML |
 | `F11` / `Super+F` | Fullscreen |
 | `Ctrl+?` | Shortcut reference |
 

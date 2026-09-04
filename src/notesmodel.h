@@ -83,6 +83,8 @@ public:
     // [[Wiki link]] target: the note whose title (or file name) matches, or ""
     Q_INVOKABLE QString pathForTitle(const QString &title) const;
     Q_INVOKABLE QString createNoteTitled(const QString &title);
+    // Daily/YYYY-MM-DD.md, created with a heading when missing.
+    Q_INVOKABLE QString dailyNotePath(const QDate &date = QDate::currentDate());
     Q_INVOKABLE int countInFolder(const QString &folder) const;
     Q_INVOKABLE bool removeNote(const QString &path);
     Q_INVOKABLE bool renameNote(const QString &path, const QString &newFileName);

@@ -30,7 +30,7 @@ and deletion.
 4. Follow the system theme exactly as omawrite does (same `SystemTheme` source, same palette properties).
 5. Coexist with the installed omawrite package (separate binary, config, data, desktop entry).
 
-## 4. Non-goals (v1)
+## 4. Non-goals (v1; see the v0.2 notes inline for what has since shipped)
 
 - Notebooks. (v0.2 shipped folders as one level of subdirectories, and tags as `#tag` text / front matter.)
 - Sync, cloud, or accounts.

@@ -251,6 +251,23 @@ private slots:
                  QStringLiteral("<table border=\"1\" cellspacing=\"0\" cellpadding=\"4\">\n<tr><th>A</th><th>B</th></tr>\n<tr><td>a|b</td><td>c</td></tr>\n</table>\n"));
     }
 
+    void createsDailyNotes() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        NotesModel model;
+        model.setNotesDir(dir.path());
+        const QString path = model.dailyNotePath(QDate(2026, 9, 5));
+        QCOMPARE(path, dir.filePath(QStringLiteral("Daily/2026-09-05.md")));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(file.readAll()), QStringLiteral("# Saturday, September 5, 2026\n\n"));
+        file.close();
+        QCOMPARE(model.folders(), QStringList{QStringLiteral("Daily")});
+        // A second call reuses the note instead of overwriting it.
+        QCOMPARE(model.dailyNotePath(QDate(2026, 9, 5)), path);
+        QCOMPARE(model.totalCount(), 1);
+    }
+
     void autosavesNotesInsideTheNotesFolder() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());

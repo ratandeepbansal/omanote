@@ -42,6 +42,10 @@ Item {
         filterField.selectAll();
     }
 
+    function setSearchText(text) {
+        filterField.text = text;
+    }
+
     function focusList() {
         noteList.forceActiveFocus();
         if (noteList.currentIndex < 0 && noteList.count > 0)

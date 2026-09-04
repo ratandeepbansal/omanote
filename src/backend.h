@@ -80,6 +80,9 @@ public:
     Q_INVOKABLE void reloadFromDisk();
     Q_INVOKABLE void keepExternalVersion();
     Q_INVOKABLE void printDocument();
+    // Save-as dialog offering PDF and HTML; renders the Markdown.
+    Q_INVOKABLE void exportDocument();
+    Q_INVOKABLE void raiseWindow();
     Q_INVOKABLE void newWindow();
     Q_INVOKABLE QString clipboardUrl() const;
     Q_INVOKABLE QString clipboardText() const;

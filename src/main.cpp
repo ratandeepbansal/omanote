@@ -13,7 +13,14 @@
 #include "backend.h"
 #include "notesmodel.h"
 #include <QCommandLineParser>
+#include <QDate>
+#include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLocalServer>
+#include <QLocalSocket>
 #include <QSettings>
+#include <QStandardPaths>
 #include "systemtheme.h"
 
 int main(int argc, char *argv[]) {
@@ -34,12 +41,49 @@ int main(int argc, char *argv[]) {
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Markdown notes with a sidebar"));
     parser.addHelpOption();
-    parser.addPositionalArgument(QStringLiteral("file"), QStringLiteral("Markdown file to open"));
+    parser.addPositionalArgument(QStringLiteral("file"), QStringLiteral("Markdown file to open (or a title with --new)"));
     const QCommandLineOption notesDirOption(
         QStringLiteral("notes-dir"), QStringLiteral("Folder that holds the notes"),
         QStringLiteral("dir"));
     parser.addOption(notesDirOption);
+    const QCommandLineOption newOption(
+        QStringLiteral("new"), QStringLiteral("Create a note in the running window; a positional argument is its title"));
+    const QCommandLineOption dailyOption(QStringLiteral("daily"), QStringLiteral("Open today's note in Daily/"));
+    const QCommandLineOption searchOption(
+        QStringLiteral("search"), QStringLiteral("Focus the sidebar search with this text"), QStringLiteral("text"));
+    const QCommandLineOption newWindowOption(
+        QStringLiteral("new-window"), QStringLiteral("Always start a separate window"));
+    parser.addOption(newOption);
+    parser.addOption(dailyOption);
+    parser.addOption(searchOption);
+    parser.addOption(newWindowOption);
     parser.process(app);
+
+    // Commands from the shell (omanote --new, --daily, --search, a file path)
+    // are handed to an already running window over a local socket, so a
+    // global hotkey feels instant instead of spawning a second instance.
+    QJsonObject command;
+    if (parser.isSet(newOption))
+        command.insert(QStringLiteral("new"), parser.positionalArguments().join(QLatin1Char(' ')));
+    if (parser.isSet(dailyOption))
+        command.insert(QStringLiteral("daily"), true);
+    if (parser.isSet(searchOption))
+        command.insert(QStringLiteral("search"), parser.value(searchOption));
+    if (!parser.isSet(newOption) && !parser.positionalArguments().isEmpty())
+        command.insert(QStringLiteral("open"), QDir::current().absoluteFilePath(parser.positionalArguments().first()));
+
+    const QString socketName = QStringLiteral("omanote-%1")
+        .arg(qEnvironmentVariable("USER", QStringLiteral("user")));
+    if (!parser.isSet(newWindowOption) && !parser.isSet(notesDirOption)) {
+        QLocalSocket client;
+        client.connectToServer(socketName);
+        if (client.waitForConnected(300)) {
+            client.write(QJsonDocument(command).toJson(QJsonDocument::Compact));
+            client.flush();
+            client.waitForBytesWritten(1000);
+            return 0;
+        }
+    }
 
     Backend backend(&app);
     NotesModel notesModel(&app);
@@ -101,11 +145,51 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    backend.setParentWindow(qobject_cast<QWindow *>(engine.rootObjects().constFirst()));
+    QObject *root = engine.rootObjects().constFirst();
+    backend.setParentWindow(qobject_cast<QWindow *>(root));
+
+    const auto runCommand = [&backend, &notesModel, root](const QJsonObject &cmd) {
+        if (backend.modified() && backend.autosaveActive())
+            backend.saveNow();
+        if (cmd.contains(QStringLiteral("new"))) {
+            const QString title = cmd.value(QStringLiteral("new")).toString();
+            const QString path = title.isEmpty() ? notesModel.createNote() : notesModel.createNoteTitled(title);
+            if (!path.isEmpty())
+                backend.openPath(path);
+        } else if (cmd.value(QStringLiteral("daily")).toBool()) {
+            const QString path = notesModel.dailyNotePath(QDate::currentDate());
+            if (!path.isEmpty())
+                backend.openPath(path);
+        } else if (cmd.contains(QStringLiteral("open"))) {
+            backend.open(QUrl::fromLocalFile(cmd.value(QStringLiteral("open")).toString()));
+        }
+        if (cmd.contains(QStringLiteral("search")))
+            QMetaObject::invokeMethod(root, "searchNotes", Q_ARG(QVariant, cmd.value(QStringLiteral("search")).toString()));
+        backend.raiseWindow();
+        if (!cmd.contains(QStringLiteral("search")))
+            QMetaObject::invokeMethod(root, "focusEditor");
+    };
+
+    QLocalServer server(&app);
+    if (!parser.isSet(newWindowOption) && !parser.isSet(notesDirOption)) {
+        QLocalServer::removeServer(socketName);
+        if (server.listen(socketName)) {
+            QObject::connect(&server, &QLocalServer::newConnection, &app, [&server, runCommand]() {
+                while (QLocalSocket *socket = server.nextPendingConnection()) {
+                    QObject::connect(socket, &QLocalSocket::readyRead, socket, [socket, runCommand]() {
+                        const QJsonObject cmd = QJsonDocument::fromJson(socket->readAll()).object();
+                        socket->deleteLater();
+                        runCommand(cmd);
+                    });
+                    QObject::connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
+                }
+            });
+        }
+    }
 
     const QStringList args = parser.positionalArguments();
-    if (!args.isEmpty() && !backend.modified()) {
-        backend.open(QUrl::fromLocalFile(args.at(0)));
+    if (!command.isEmpty() && !backend.modified()) {
+        runCommand(command);
     } else if (!backend.modified() && !backend.fileUrl().isValid()) {
         // Land on the most recent note so the app opens into the library.
         // An empty library gets a starter note so typing autosaves right away.

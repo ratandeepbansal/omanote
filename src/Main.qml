@@ -115,6 +115,20 @@ ApplicationWindow {
         editor.forceActiveFocus();
     }
 
+    // Entry points for shell commands (omanote --search / --new).
+    function searchNotes(text) {
+        if (!sidebarOpen) {
+            sidebarOpen = true;
+            backend.setSetting("sidebar/open", true);
+        }
+        sidebar.setSearchText(text);
+        sidebar.focusSearch();
+    }
+
+    function focusEditor() {
+        editor.forceActiveFocus();
+    }
+
     function toggleSidebar() {
         sidebarOpen = !sidebarOpen;
         backend.setSetting("sidebar/open", sidebarOpen);
@@ -305,6 +319,12 @@ ApplicationWindow {
         sequence: "Ctrl+Shift+P"
         context: Qt.ApplicationShortcut
         onActivated: win.togglePinCurrent()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+E"
+        context: Qt.ApplicationShortcut
+        onActivated: backend.exportDocument()
     }
 
     Shortcut {
@@ -572,7 +592,7 @@ ApplicationWindow {
         standardButtons: Dialog.Close
         anchors.centerIn: parent
         contentItem: Label {
-            text: "Ctrl+N  New Note\nCtrl+\\  Toggle Sidebar\nCtrl+Shift+F  Search Notes\nCtrl+Alt+Up/Down  Previous/Next Note\nCtrl+Shift+P  Pin Note\nCtrl+Shift+M  Move Note to Folder\nCtrl+Shift+V  Preview\nCtrl+Shift+T  Insert / Format Table\nCtrl+Shift+C  Copy Table with Formatting\nCtrl+Enter  Toggle Checkbox\nTab / Shift+Tab  Indent List Item\nCtrl+Click [[Note]]  Follow Link\nCtrl+S  Save\nCtrl+Shift+S  Save As\nCtrl+O  Open\nCtrl+Shift+N  New Window\nCtrl+F  Find\nCtrl+H  Find and Replace\nCtrl+B  Bold\nCtrl+I  Italic\nCtrl+K  Link\nCtrl+P  Print\nF11 / Super+F  Fullscreen\nCtrl+?  Shortcuts"
+            text: "Ctrl+N  New Note\nCtrl+\\  Toggle Sidebar\nCtrl+Shift+F  Search Notes\nCtrl+Alt+Up/Down  Previous/Next Note\nCtrl+Shift+P  Pin Note\nCtrl+Shift+M  Move Note to Folder\nCtrl+Shift+V  Preview\nCtrl+Shift+T  Insert / Format Table\nCtrl+Shift+C  Copy Table with Formatting\nCtrl+Enter  Toggle Checkbox\nTab / Shift+Tab  Indent List Item\nCtrl+Click [[Note]]  Follow Link\nCtrl+S  Save\nCtrl+Shift+S  Save As\nCtrl+O  Open\nCtrl+Shift+N  New Window\nCtrl+F  Find\nCtrl+H  Find and Replace\nCtrl+B  Bold\nCtrl+I  Italic\nCtrl+K  Link\nCtrl+P  Print\nCtrl+Shift+E  Export PDF / HTML\nF11 / Super+F  Fullscreen\nCtrl+?  Shortcuts"
             lineHeight: 1.5
         }
     }

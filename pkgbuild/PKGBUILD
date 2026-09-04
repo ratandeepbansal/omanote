@@ -1,7 +1,7 @@
 # Maintainer: Ratandeep Bansal
 
 pkgname=omanote
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc='Markdown notes app with a collapsible notes sidebar, built with Qt Quick, forked from omawrite'
 arch=('x86_64')
@@ -21,6 +21,7 @@ build() {
 package() {
   cd "$startdir/.."
   /usr/bin/install -Dm755 build/omanote "$pkgdir/usr/bin/omanote"
+  /usr/bin/install -Dm755 bin/omanote-pick "$pkgdir/usr/bin/omanote-pick"
   /usr/bin/install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   /usr/bin/install -Dm644 fonts/OFL.txt "$pkgdir/usr/share/licenses/$pkgname/OFL.txt"
   /usr/bin/install -Dm644 "$startdir/omanote.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/omanote.svg"
