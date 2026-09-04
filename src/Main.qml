@@ -354,6 +354,7 @@ ApplicationWindow {
                 backend.openPath(next);
             else
                 backend.newDocument();
+            editor.forceActiveFocus();
         }
     }
 
@@ -440,10 +441,10 @@ ApplicationWindow {
         activeButtonColor: backend.themeAccent
         containerWidth: win.width
         containerHeight: win.height
-        onDeleteConfirmed: function(path) {
-            if (!notesModel.removeNote(path))
-                backend.setSearchHighlight("", -1);
-        }
+        onDeleteConfirmed: function(path) { notesModel.removeNote(path) }
+        // Popups hand focus back to the sidebar list on close; the editor
+        // is where typing should land after a delete or a cancel.
+        onClosed: editor.forceActiveFocus()
     }
 
     RenameNoteDialog {
