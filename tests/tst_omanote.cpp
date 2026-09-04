@@ -212,11 +212,12 @@ private slots:
         QCOMPARE(backend.filePath(), second);
         QVERIFY(!model.isPinned(first));
 
-        // Deleting the last note leaves an empty document.
+        // Deleting the last note creates a fresh one so typing keeps autosaving.
         QVERIFY(model.removeNote(second));
-        QCOMPARE(backend.filePath(), QString());
+        QCOMPARE(backend.filePath(), dir.filePath(QStringLiteral("Untitled.md")));
         QCOMPARE(editor->property("text").toString(), QString());
-        QCOMPARE(model.totalCount(), 0);
+        QCOMPARE(model.totalCount(), 1);
+        QVERIFY(backend.autosaveActive());
 
         // Sidebar toggle persists.
         QVERIFY(window->property("sidebarOpen").toBool());

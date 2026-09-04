@@ -348,6 +348,8 @@ ApplicationWindow {
             if (path !== backend.filePath)
                 return;
             var next = notesModel.pathAt(0);
+            if (next === "")
+                next = notesModel.createNote();
             if (next !== "")
                 backend.openPath(next);
             else

@@ -105,7 +105,10 @@ int main(int argc, char *argv[]) {
         backend.open(QUrl::fromLocalFile(args.at(0)));
     } else if (!backend.modified() && !backend.fileUrl().isValid()) {
         // Land on the most recent note so the app opens into the library.
-        const QString first = notesModel.pathAt(0);
+        // An empty library gets a starter note so typing autosaves right away.
+        QString first = notesModel.pathAt(0);
+        if (first.isEmpty())
+            first = notesModel.createNote();
         if (!first.isEmpty())
             backend.open(QUrl::fromLocalFile(first));
     }
