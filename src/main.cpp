@@ -45,13 +45,16 @@ int main(int argc, char *argv[]) {
     NotesModel notesModel(&app);
     {
         QSettings settings;
+        // A --notes-dir override is for this run only; it must never be
+        // written into the config, or a one-off test folder becomes permanent.
         QString notesDir = parser.value(notesDirOption);
-        if (notesDir.isEmpty())
+        if (notesDir.isEmpty()) {
             notesDir = settings.value(QStringLiteral("notes/folder")).toString();
-        if (notesDir.isEmpty())
-            notesDir = Backend::defaultNotesDir();
-        if (!settings.contains(QStringLiteral("notes/folder")))
-            settings.setValue(QStringLiteral("notes/folder"), notesDir);
+            if (notesDir.isEmpty()) {
+                notesDir = Backend::defaultNotesDir();
+                settings.setValue(QStringLiteral("notes/folder"), notesDir);
+            }
+        }
         backend.setNotesDir(notesDir);
         notesModel.setNotesDir(notesDir);
     }
