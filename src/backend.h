@@ -120,6 +120,8 @@ public:
 
 signals:
     void fileUrlChanged();
+    // The editor document was replaced wholesale (open, new, reload).
+    void documentLoaded();
     void notesDirChanged();
     void fileSaved(const QString &path);
     void modifiedChanged();

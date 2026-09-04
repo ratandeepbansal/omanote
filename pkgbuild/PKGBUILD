@@ -1,7 +1,7 @@
 # Maintainer: Ratandeep Bansal
 
 pkgname=omanote
-pkgver=0.2.1
+pkgver=0.2.2
 pkgrel=1
 pkgdesc='Markdown notes app with a collapsible notes sidebar, built with Qt Quick, forked from omawrite'
 arch=('x86_64')

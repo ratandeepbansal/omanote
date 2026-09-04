@@ -429,6 +429,16 @@ ApplicationWindow {
     Connections {
         target: backend
 
+        // Replacing the document leaves the caret delegate parked where it was
+        // in the previous note; put it (and the scroll) back at the top.
+        function onDocumentLoaded() {
+            editor.cursorVisible = false;
+            editor.select(0, 0);
+            editor.cursorPosition = 0;
+            editorFlick.contentY = 0;
+            editor.cursorVisible = true;
+        }
+
         function onOpenDialogRequested() {
             openFileDialog.open();
         }
