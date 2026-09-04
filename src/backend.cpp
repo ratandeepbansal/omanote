@@ -490,6 +490,37 @@ QString Backend::markdownToHtml(const QString &markdown) const {
     return document.toHtml();
 }
 
+QString Backend::previewHtml(const QString &markdown) const {
+    // QTextDocument::setMarkdown drops images, so lift them out first, convert
+    // the rest, and put <img> tags back where the placeholders landed.
+    const QString notePath = filePath();
+    const QString baseDir = notePath.isEmpty() ? m_notesDir : QFileInfo(notePath).absolutePath();
+    static const QRegularExpression imageRe(QStringLiteral("!\\[([^\\]]*)\\]\\(([^)\\s]+)[^)]*\\)"));
+    QStringList images;
+    QString text;
+    int last = 0;
+    QRegularExpressionMatchIterator it = imageRe.globalMatch(markdown);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch match = it.next();
+        text += markdown.mid(last, match.capturedStart(0) - last);
+        text += QStringLiteral("OMANOTEIMG%1X").arg(images.size());
+        last = match.capturedEnd(0);
+        QString src = match.captured(2);
+        const QUrl url(src);
+        if (url.scheme().isEmpty() && !src.startsWith(QLatin1Char('/')) && !baseDir.isEmpty())
+            src = QUrl::fromLocalFile(QDir(baseDir).filePath(src)).toString();
+        else if (src.startsWith(QLatin1Char('/')))
+            src = QUrl::fromLocalFile(src).toString();
+        images.append(QStringLiteral("<img src=\"%1\" alt=\"%2\" />")
+                          .arg(src.toHtmlEscaped(), match.captured(1).toHtmlEscaped()));
+    }
+    text += markdown.mid(last);
+    QString html = markdownToHtml(text);
+    for (int i = 0; i < images.size(); ++i)
+        html.replace(QStringLiteral("OMANOTEIMG%1X").arg(i), images.at(i));
+    return html;
+}
+
 QList<QStringList> Backend::tableRowsFromHtml(const QString &html) {
     QList<QStringList> rows;
     if (!html.contains(QStringLiteral("<table"), Qt::CaseInsensitive))

@@ -7,6 +7,8 @@
 #include <QQuickTextDocument>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QImage>
+#include <QUrl>
 
 #include "backend.h"
 #include "markdownhighlighter.h"
@@ -32,6 +34,10 @@ private slots:
         QCOMPARE(NotesModel::titleFor(QStringLiteral("\n\n  \n"), QStringLiteral("Untitled 2.md")),
                  QStringLiteral("Untitled 2"));
         QCOMPARE(NotesModel::previewFor(QStringLiteral("Only a title")), QString());
+        QCOMPARE(NotesModel::titleFor(QStringLiteral("---\ntags: [a]\n---\n# Reading list\nbooks"), QStringLiteral("r.md")),
+                 QStringLiteral("Reading list"));
+        QCOMPARE(NotesModel::previewFor(QStringLiteral("---\ntags: [a]\n---\n# Reading list\nbooks")),
+                 QStringLiteral("books"));
         QCOMPARE(NotesModel::stripMarkdown(QStringLiteral("> see [docs](http://x) `now`")),
                  QStringLiteral("see docs now"));
     }
@@ -228,6 +234,15 @@ private slots:
         QVERIFY(created.endsWith(QStringLiteral("Trip- Japan-2027.md")));
         QCOMPARE(model.pathForTitle(QStringLiteral("Trip: Japan/2027")), created);
         QVERIFY(model.createNoteTitled(QStringLiteral("Trip: Japan/2027")).endsWith(QStringLiteral(" 2.md")));
+    }
+
+    void rendersImagesInPreviewHtml() {
+        Backend backend;
+        backend.setNotesDir(QStringLiteral("/notes"));
+        const QString html = backend.previewHtml(QStringLiteral("para ![shot](assets/a-b.png) and\n\n![](https://x/y.png)\n"));
+        QVERIFY(html.contains(QStringLiteral("<img src=\"file:///notes/assets/a-b.png\" alt=\"shot\" />")));
+        QVERIFY(html.contains(QStringLiteral("<img src=\"https://x/y.png\" alt=\"\" />")));
+        QVERIFY(!html.contains(QStringLiteral("OMANOTEIMG")));
     }
 
     void convertsTables() {

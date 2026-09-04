@@ -351,8 +351,20 @@ QString NotesModel::stripMarkdown(const QString &line) {
     return out.trimmed();
 }
 
+// Lines of the note body with any leading YAML front matter removed.
+static QStringList bodyLines(const QString &text) {
+    QStringList lines = text.split(QLatin1Char('\n'));
+    if (!lines.isEmpty() && lines.first().trimmed() == QStringLiteral("---")) {
+        for (int i = 1; i < lines.size(); ++i) {
+            if (lines.at(i).trimmed() == QStringLiteral("---"))
+                return lines.mid(i + 1);
+        }
+    }
+    return lines;
+}
+
 QString NotesModel::titleFor(const QString &text, const QString &fileName) {
-    const QStringList lines = text.split(QLatin1Char('\n'));
+    const QStringList lines = bodyLines(text);
     for (const QString &line : lines) {
         const QString stripped = stripMarkdown(line);
         if (!stripped.isEmpty())
@@ -363,7 +375,7 @@ QString NotesModel::titleFor(const QString &text, const QString &fileName) {
 }
 
 QString NotesModel::previewFor(const QString &text) {
-    const QStringList lines = text.split(QLatin1Char('\n'));
+    const QStringList lines = bodyLines(text);
     bool skippedTitle = false;
     for (const QString &line : lines) {
         const QString stripped = stripMarkdown(line);

@@ -1211,7 +1211,10 @@ ApplicationWindow {
                         return;
                     }
                     var line = currentLineRange();
-                    var prefix = line.line.length > 0 ? "\n" : "";
+                    var prefix = line.line.length > 0 ? "\n\n" : "";
+                    // A table directly under another line would merge into it; keep a blank line.
+                    if (prefix === "" && line.start >= 2 && text.charAt(line.start - 2) !== "\n")
+                        prefix = "\n";
                     var table = "| Column | Column |\n| ------ | ------ |\n|        |        |\n";
                     var start = cursorPosition + prefix.length;
                     replaceSelectionWith(prefix + table);
@@ -1364,15 +1367,16 @@ ApplicationWindow {
                 width: editor.width
                 readOnly: true
                 selectByMouse: true
-                textFormat: TextEdit.MarkdownText
+                // Rich text rather than MarkdownText: TextEdit's Markdown mode
+                // never re-lays out after an image loads, so images vanish.
+                textFormat: TextEdit.RichText
                 wrapMode: TextEdit.Wrap
                 color: win.textColor
                 selectedTextColor: win.strongTextColor
                 selectionColor: win.selectionFill
                 font.family: "iA Writer Mono S"
                 font.pixelSize: win.editorFontPixelSize
-                text: visible ? editor.text : ""
-                baseUrl: backend.fileUrl
+                text: visible ? backend.previewHtml(editor.text) : ""
                 onLinkActivated: function(link) { backend.openExternalUrl(link) }
             }
         }

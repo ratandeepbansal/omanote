@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Drives the built app on a live Hyprland desktop (wtype + grim) against a
+# scratch notes dir and writes screenshots of each v0.2 feature to $S/shots.
+# Needs: hyprctl, wtype, grim, wl-copy, magick.
+set -u
+S="${OMANOTE_SCRATCH:-${TMPDIR:-/tmp}/omanote-ui-drive}"; mkdir -p "$S"
+N=$S/v02notes; OUT=$S/shots; rm -rf "$N" "$OUT"; mkdir -p "$N/Work" "$N/Personal" "$OUT"
+printf '# Weekly plan\nShip omanote v0.2 #work #urgent\n\n- [x] folders\n- [ ] tags\n' > "$N/Work/plan.md"
+printf '# Groceries\nmilk, eggs #home\nsee [[Weekly plan]]\n' > "$N/Personal/groceries.md"
+printf -- '---\ntags: [ideas, home]\n---\n# Reading list\nsome books\n' > "$N/reading.md"
+printf '# Scratch\n\n' > "$N/scratch.md"
+touch -d '2 days ago' "$N/reading.md"; touch -d '10 days ago' "$N/scratch.md"
+cd "$(dirname "$0")/.."
+build/omanote --notes-dir "$N" "$N/scratch.md" >"$S/app.log" 2>&1 &
+APP=$!
+sleep 2.5
+geo() { hyprctl clients -j | python3 -c 'import json,sys;c=[c for c in json.load(sys.stdin) if c["pid"]=='$APP'][0];print(f"{c["at"][0]},{c["at"][1]} {c["size"][0]}x{c["size"][1]}")'; }
+shot() { sleep 0.8; grim -g "$(geo)" "$OUT/$1.png"; echo "shot $1"; }
+addr=$(hyprctl clients -j | python3 -c 'import json,sys;print([c for c in json.load(sys.stdin) if c["pid"]=='$APP'][0]["address"])')
+hyprctl dispatch togglefloating address:$addr >/dev/null; hyprctl dispatch resizewindowpixel exact 1400 900,address:$addr >/dev/null; hyprctl dispatch movewindowpixel exact 60 60,address:$addr >/dev/null; sleep 0.5
+hyprctl dispatch focuswindow address:$addr >/dev/null; sleep 0.5
+shot 01-library-all
+# folder filter via search "tag:" and #tag search
+# editor: type checklist + tab indent + toggle
+wtype -M ctrl -k End -m ctrl; wtype -- '- first item'; wtype -k Return; wtype 'second'; wtype -k Tab; wtype -k Return; wtype 'third'
+wtype -M ctrl -k Return -m ctrl; wtype -M ctrl -k Return -m ctrl; shot 04-checklist-indent
+# wiki link + tag typing
+wtype -k Return; wtype -k Return; wtype 'link to [[Groceries]] and #newtag'; shot 05-wikilink-tag
+# table paste from TSV
+printf 'Item\tQty\tPrice\nApples\t3\t1.20\nPears\t12\t0.80\n' | wl-copy
+wtype -k Return; wtype -k Return; wtype -M ctrl -k v -m ctrl; shot 06-table-paste
+# format table + tab across cells
+wtype -M ctrl -M shift -k t -m shift -m ctrl; shot 07-table-format
+# image paste
+magick -size 160x80 xc:"#e0a040" $S/img.png
+wl-copy -t image/png < $S/img.png; wtype -M ctrl -k End -m ctrl; wtype -k Return; wtype -M ctrl -k v -m ctrl; shot 08-image-paste
+# preview
+wtype -M ctrl -M shift -k v -m shift -m ctrl; shot 09-preview; wtype -M ctrl -M shift -k v -m shift -m ctrl
+sleep 1.5
+# move-to-folder menu, then search by tag (these leave focus in the sidebar)
+wtype -M ctrl -M shift -k m -m shift -m ctrl; shot 03-move-menu; wtype -k Escape; sleep 0.3
+wtype -M ctrl -M shift -k f -m shift -m ctrl; sleep 0.3; wtype 'tag:home'; shot 02-search-tag-home
+wtype -k Escape
+# CLI: --new-window bypass is not used; --notes-dir instance has no socket. Test daily via a second instance? Skip; covered earlier.
+sleep 1.5
+echo "--- files:"; find "$N" -type f | sort; echo "--- scratch.md:"; cat "$N/scratch.md"
+kill $APP; wait $APP 2>/dev/null; sleep 0.5; echo "--- log:"; grep -v "Binding loop\|Material/Dialog" "$S/app.log" | head

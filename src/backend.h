@@ -91,6 +91,9 @@ public:
     // and returns the Markdown to insert, or "" when there is nothing to save.
     Q_INVOKABLE QString saveClipboardImage();
     Q_INVOKABLE QString markdownToHtml(const QString &markdown) const;
+    // HTML for the in-app preview: relative image paths are made absolute so
+    // they resolve from the note's folder.
+    Q_INVOKABLE QString previewHtml(const QString &markdown) const;
     // Table support: a pasted HTML table or tab-separated spreadsheet range
     // becomes a Markdown pipe table; copying a pipe table puts an HTML table on
     // the clipboard next to the Markdown so it pastes formatted elsewhere.
