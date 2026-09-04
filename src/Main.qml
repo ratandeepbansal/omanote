@@ -1309,6 +1309,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
+        notesModel.sortMode = backend.setting("library/sort", "modified");
         var geometry = backend.windowGeometry();
         if (geometry.x >= 0) x = geometry.x;
         if (geometry.y >= 0) y = geometry.y;

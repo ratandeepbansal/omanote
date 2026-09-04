@@ -132,6 +132,15 @@ Item {
             }
 
             FooterIconButton {
+                iconName: "sort"
+                iconColor: panel.mutedColor
+                tooltip: "Sort notes"
+                Layout.preferredWidth: 16
+                Layout.preferredHeight: 16
+                onClicked: sortMenu.popup()
+            }
+
+            FooterIconButton {
                 iconName: "new"
                 iconColor: panel.mutedColor
                 tooltip: "New note (Ctrl+N)"
@@ -308,8 +317,12 @@ Item {
                 required property string date
                 required property bool pinned
                 required property string folder
+                required property string fullDate
 
                 readonly property string noteTitle: title
+                ToolTip.visible: rowMouse.containsMouse && rowMouse.hoverStill
+                ToolTip.text: "Edited " + fullDate
+                ToolTip.delay: 900
                 readonly property bool selected: path === panel.currentPath
 
                 width: ListView.view.width
@@ -404,6 +417,7 @@ Item {
                     id: rowMouse
                     anchors.fill: parent
                     hoverEnabled: true
+                    property bool hoverStill: containsMouse
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     onClicked: function(mouse) {
                         noteList.currentIndex = row.index;
@@ -491,6 +505,24 @@ Item {
         MenuItem {
             text: "Delete…"
             onTriggered: panel.deleteRequested(rowMenu.notePath, rowMenu.noteTitle)
+        }
+    }
+
+    Menu {
+        id: sortMenu
+
+        Repeater {
+            model: [["modified", "Date edited"], ["created", "Date created"], ["title", "Title"]]
+            MenuItem {
+                required property var modelData
+                text: modelData[1]
+                checkable: true
+                checked: notesModel.sortMode === modelData[0]
+                onTriggered: {
+                    notesModel.sortMode = modelData[0];
+                    backend.setSetting("library/sort", modelData[0]);
+                }
+            }
         }
     }
 

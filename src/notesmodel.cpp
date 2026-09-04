@@ -72,6 +72,19 @@ void NotesModel::setTag(const QString &tag) {
     emit countChanged();
 }
 
+void NotesModel::setSortMode(const QString &mode) {
+    const QString normalized = (mode == QStringLiteral("created") || mode == QStringLiteral("title"))
+        ? mode : QStringLiteral("modified");
+    if (m_sortMode == normalized)
+        return;
+    m_sortMode = normalized;
+    emit sortModeChanged();
+    beginResetModel();
+    sortNotes();
+    rebuildVisible();
+    endResetModel();
+}
+
 int NotesModel::rowCount(const QModelIndex &parent) const {
     return parent.isValid() ? 0 : m_visible.size();
 }
@@ -85,7 +98,9 @@ QVariant NotesModel::data(const QModelIndex &index, int role) const {
     case FileNameRole: return note.fileName;
     case TitleRole: return note.title;
     case PreviewRole: return note.preview;
-    case DateRole: return dateLabel(note.modified, QDateTime::currentDateTime());
+    case DateRole: return dateLabel(m_sortMode == QStringLiteral("created") ? note.created : note.modified,
+                                    QDateTime::currentDateTime());
+    case FullDateRole: return fullDateLabel(note.modified);
     case PinnedRole: return note.pinned;
     case FolderRole: return note.folder;
     case TagsRole: return note.tags;
@@ -96,7 +111,8 @@ QVariant NotesModel::data(const QModelIndex &index, int role) const {
 QHash<int, QByteArray> NotesModel::roleNames() const {
     return {{PathRole, "path"},       {FileNameRole, "fileName"}, {TitleRole, "title"},
             {PreviewRole, "preview"}, {DateRole, "date"},         {PinnedRole, "pinned"},
-            {FolderRole, "folder"},   {TagsRole, "tags"}};
+            {FolderRole, "folder"},   {TagsRole, "tags"},
+            {FullDateRole, "fullDate"}};
 }
 
 void NotesModel::refresh() {
@@ -136,6 +152,7 @@ void NotesModel::scanDirectory() {
             note.fileName = info.fileName();
             note.folder = folder;
             note.modified = info.lastModified();
+            note.created = info.birthTime().isValid() ? info.birthTime() : note.modified;
             note.pinned = m_pins.contains(note.path);
             seen.insert(note.path);
 
@@ -161,8 +178,8 @@ void NotesModel::scanDirectory() {
         else
             ++it;
     }
-    std::sort(notes.begin(), notes.end(), &NotesModel::lessThan);
     m_notes = notes;
+    sortNotes();
     QSet<QString> tagSet;
     for (const Note &note : m_notes)
         for (const QString &tag : note.tags)
@@ -188,11 +205,24 @@ void NotesModel::scanDirectory() {
     }
 }
 
-bool NotesModel::lessThan(const Note &a, const Note &b) {
+void NotesModel::sortNotes() {
+    std::stable_sort(m_notes.begin(), m_notes.end(),
+                     [this](const Note &a, const Note &b) { return lessThan(a, b); });
+}
+
+bool NotesModel::lessThan(const Note &a, const Note &b) const {
     if (a.pinned != b.pinned)
         return a.pinned;
-    if (a.modified != b.modified)
+    if (m_sortMode == QStringLiteral("title")) {
+        const int byTitle = a.title.localeAwareCompare(b.title);
+        if (byTitle != 0)
+            return byTitle < 0;
+    } else if (m_sortMode == QStringLiteral("created")) {
+        if (a.created != b.created)
+            return a.created > b.created;
+    } else if (a.modified != b.modified) {
         return a.modified > b.modified;
+    }
     return a.fileName.localeAwareCompare(b.fileName) < 0;
 }
 
@@ -352,9 +382,22 @@ QString NotesModel::dateLabel(const QDateTime &modified, const QDateTime &now) {
     if (!modified.isValid())
         return {};
     const QLocale locale = QLocale::c();
+    const qint64 days = modified.date().daysTo(now.date());
+    if (days == 0)
+        return locale.toString(modified.time(), QStringLiteral("h:mm AP"));
+    if (days == 1)
+        return QStringLiteral("Yesterday");
+    if (days > 1 && days < 7)
+        return locale.toString(modified.date(), QStringLiteral("dddd"));
     if (modified.date().year() == now.date().year())
         return locale.toString(modified.date(), QStringLiteral("MMM d"));
     return locale.toString(modified.date(), QStringLiteral("MMM d, yyyy"));
+}
+
+QString NotesModel::fullDateLabel(const QDateTime &modified) {
+    if (!modified.isValid())
+        return {};
+    return QLocale::c().toString(modified, QStringLiteral("MMM d, yyyy h:mm AP"));
 }
 
 QString NotesModel::untitledPath() const {

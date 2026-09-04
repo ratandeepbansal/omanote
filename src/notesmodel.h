@@ -23,6 +23,8 @@ class NotesModel : public QAbstractListModel {
     // Tag filter: "" shows every note, otherwise only notes carrying that tag.
     Q_PROPERTY(QString tag READ tag WRITE setTag NOTIFY tagChanged)
     Q_PROPERTY(QStringList tags READ tags NOTIFY tagsChanged)
+    // "modified" (default), "created" or "title". Pinned notes always come first.
+    Q_PROPERTY(QString sortMode READ sortMode WRITE setSortMode NOTIFY sortModeChanged)
 
 public:
     enum Roles {
@@ -34,6 +36,7 @@ public:
         PinnedRole,
         FolderRole,
         TagsRole,
+        FullDateRole,
     };
     Q_ENUM(Roles)
 
@@ -43,6 +46,7 @@ public:
         QString title;
         QString preview;
         QDateTime modified;
+        QDateTime created;
         bool pinned = false;
         QString folder; // relative subfolder, empty for the notes root
         QStringList tags; // lower-case, unique, sorted
@@ -62,6 +66,8 @@ public:
     QString tag() const { return m_tag; }
     void setTag(const QString &tag);
     QStringList tags() const { return m_tags; }
+    QString sortMode() const { return m_sortMode; }
+    void setSortMode(const QString &mode);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role) const override;
@@ -87,6 +93,7 @@ public:
     static QString titleFor(const QString &text, const QString &fileName);
     static QString previewFor(const QString &text);
     static QString dateLabel(const QDateTime &modified, const QDateTime &now);
+    static QString fullDateLabel(const QDateTime &modified);
     static QString stripMarkdown(const QString &line);
     static bool validFolderName(const QString &name);
     static QStringList tagsFor(const QString &text);
@@ -99,6 +106,7 @@ signals:
     void foldersChanged();
     void tagChanged();
     void tagsChanged();
+    void sortModeChanged();
     void noteRemoved(const QString &path);
 
 private:
@@ -109,7 +117,8 @@ private:
     void savePins() const;
     QString pinsPath() const;
     void watchDirectory();
-    static bool lessThan(const Note &a, const Note &b);
+    bool lessThan(const Note &a, const Note &b) const;
+    void sortNotes();
 
     QString m_notesDir;
     QString m_filter;
@@ -117,6 +126,7 @@ private:
     QStringList m_folders;
     QString m_tag;
     QStringList m_tags;
+    QString m_sortMode = QStringLiteral("modified");
     QVector<Note> m_notes;
     QVector<int> m_visible;
     QSet<QString> m_pins;

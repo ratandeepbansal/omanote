@@ -73,6 +73,7 @@ or set `notes/folder` in `~/.config/Omacom/omanote.conf`.
 | `Delete` on a selected row | Delete note, with confirmation |
 | Right-click a note | Pin, rename file, move to folder, show in folder, delete |
 | Folder chips above the list | Filter by folder; `+` creates one; right-click renames or deletes |
+| Sort icon next to search | Sort by date edited, date created, or title. Pinned notes stay on top |
 | Tag chips | Any `#tag` in a note (or `tags:` in front matter) becomes a chip; click to filter. `tag:foo` works in search too |
 | `Ctrl+Shift+N` | New window |
 | `Ctrl+O` | Open any Markdown file |

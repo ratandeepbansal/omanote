@@ -58,6 +58,14 @@ Item {
                 context.rect(2.5, 3.5, 11, 9);
                 context.moveTo(6.5, 3.5);
                 context.lineTo(6.5, 12.5);
+            } else if (control.iconName === "sort") {
+                // Three lines of decreasing length.
+                context.moveTo(3, 4.5);
+                context.lineTo(13, 4.5);
+                context.moveTo(3, 8);
+                context.lineTo(10, 8);
+                context.moveTo(3, 11.5);
+                context.lineTo(7, 11.5);
             } else if (control.iconName === "new") {
                 context.moveTo(8, 3);
                 context.lineTo(8, 13);

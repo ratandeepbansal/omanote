@@ -39,7 +39,13 @@ private slots:
     void formatsDates() {
         const QDateTime now(QDate(2026, 9, 4), QTime(12, 0));
         QCOMPARE(NotesModel::dateLabel(QDateTime(QDate(2026, 9, 4), QTime(9, 0)), now),
-                 QStringLiteral("Sep 4"));
+                 QStringLiteral("9:00 AM"));
+        QCOMPARE(NotesModel::dateLabel(QDateTime(QDate(2026, 9, 3), QTime(9, 0)), now),
+                 QStringLiteral("Yesterday"));
+        QCOMPARE(NotesModel::dateLabel(QDateTime(QDate(2026, 9, 1), QTime(9, 0)), now),
+                 QStringLiteral("Tuesday"));
+        QCOMPARE(NotesModel::dateLabel(QDateTime(QDate(2026, 8, 4), QTime(9, 0)), now),
+                 QStringLiteral("Aug 4"));
         QCOMPARE(NotesModel::dateLabel(QDateTime(QDate(2025, 12, 25), QTime(9, 0)), now),
                  QStringLiteral("Dec 25, 2025"));
     }
@@ -78,6 +84,15 @@ private slots:
         NotesModel reloaded;
         reloaded.setNotesDir(dir.path());
         QVERIFY(reloaded.isPinned(dir.filePath(QStringLiteral("old.md"))));
+
+        model.setPinned(dir.filePath(QStringLiteral("old.md")), false);
+        model.setSortMode(QStringLiteral("title"));
+        QCOMPARE(model.data(model.index(0), NotesModel::TitleRole).toString(),
+                 QStringLiteral("New note"));
+        QCOMPARE(model.data(model.index(1), NotesModel::TitleRole).toString(),
+                 QStringLiteral("Old note"));
+        model.setSortMode(QStringLiteral("bogus"));
+        QCOMPARE(model.sortMode(), QStringLiteral("modified"));
 
         model.setFilter(QStringLiteral("dogs"));
         QCOMPARE(model.rowCount(), 1);
