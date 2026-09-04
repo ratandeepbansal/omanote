@@ -144,6 +144,87 @@ private slots:
         QCOMPARE(QString::fromUtf8(f.readAll()), QStringLiteral("# Hi\nchanged"));
     }
 
+    void drivesNotesSidebarThroughMainWindow() {
+        const QString mainQmlPath = QFINDTESTDATA("../src/Main.qml");
+        QVERIFY(!mainQmlPath.isEmpty());
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+
+        Backend backend;
+        NotesModel model;
+        backend.setNotesDir(dir.path());
+        model.setNotesDir(dir.path());
+        QObject::connect(&backend, &Backend::fileSaved, &model, [&model]() { model.refresh(); });
+
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        engine.rootContext()->setContextProperty(QStringLiteral("notesModel"), &model);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> window(component.create());
+        QVERIFY2(window, qPrintable(component.errorString()));
+        QObject *editor = window->findChild<QObject *>(QStringLiteral("sourceEditor"));
+        QVERIFY(editor);
+
+        // New note lands in the folder, becomes current, and autosaves typing.
+        QVERIFY(QMetaObject::invokeMethod(window.data(), "newNote"));
+        const QString first = dir.filePath(QStringLiteral("Untitled.md"));
+        QVERIFY(QFileInfo::exists(first));
+        QCOMPARE(backend.filePath(), first);
+        QVERIFY(backend.autosaveActive());
+        QSignalSpy saved(&backend, &Backend::fileSaved);
+        editor->setProperty("text", QStringLiteral("# First note\nbody one"));
+        QVERIFY(saved.wait(3000));
+        QCOMPARE(model.data(model.index(0), NotesModel::TitleRole).toString(),
+                 QStringLiteral("First note"));
+
+        // Second note; switching back saves without prompting.
+        QVERIFY(QMetaObject::invokeMethod(window.data(), "newNote"));
+        const QString second = dir.filePath(QStringLiteral("Untitled 2.md"));
+        QCOMPARE(backend.filePath(), second);
+        editor->setProperty("text", QStringLiteral("# Second note\nbody two"));
+        QVERIFY(backend.modified());
+        QVERIFY(QMetaObject::invokeMethod(window.data(), "openNote", Q_ARG(QVariant, first)));
+        QCOMPARE(backend.filePath(), first);
+        QVERIFY(!backend.modified());
+        QCOMPARE(editor->property("text").toString(), QStringLiteral("# First note\nbody one"));
+        {
+            QFile f(second);
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            QCOMPARE(QString::fromUtf8(f.readAll()), QStringLiteral("# Second note\nbody two"));
+        }
+
+        // Pin the current note: it moves to the top and persists.
+        QCOMPARE(model.pathAt(0), second);
+        QVERIFY(QMetaObject::invokeMethod(window.data(), "togglePinCurrent"));
+        QVERIFY(model.isPinned(first));
+        QCOMPARE(model.pathAt(0), first);
+
+        // Search filters by body text.
+        model.setFilter(QStringLiteral("body two"));
+        QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(model.pathAt(0), second);
+        model.setFilter(QString());
+
+        // Deleting the current note moves to the next one.
+        QVERIFY(model.removeNote(first));
+        QVERIFY(!QFileInfo::exists(first));
+        QCOMPARE(backend.filePath(), second);
+        QVERIFY(!model.isPinned(first));
+
+        // Deleting the last note leaves an empty document.
+        QVERIFY(model.removeNote(second));
+        QCOMPARE(backend.filePath(), QString());
+        QCOMPARE(editor->property("text").toString(), QString());
+        QCOMPARE(model.totalCount(), 0);
+
+        // Sidebar toggle persists.
+        QVERIFY(window->property("sidebarOpen").toBool());
+        QVERIFY(QMetaObject::invokeMethod(window.data(), "toggleSidebar"));
+        QVERIFY(!window->property("sidebarOpen").toBool());
+        QVERIFY(!backend.setting(QStringLiteral("sidebar/open"), true).toBool());
+    }
+
     void countsWords() {
         QCOMPARE(Backend::countWords(QStringLiteral("one two-three don't 42")), 4);
         QCOMPARE(Backend::countWords(QStringLiteral("你好 世界")), 2);
@@ -291,8 +372,10 @@ private slots:
         QVERIFY(!mainQmlPath.isEmpty());
 
         Backend backend;
+        NotesModel model;
         QQmlEngine engine;
         engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        engine.rootContext()->setContextProperty(QStringLiteral("notesModel"), &model);
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
@@ -321,8 +404,10 @@ private slots:
         QVERIFY(!mainQmlPath.isEmpty());
 
         Backend backend;
+        NotesModel model;
         QQmlEngine engine;
         engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        engine.rootContext()->setContextProperty(QStringLiteral("notesModel"), &model);
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
