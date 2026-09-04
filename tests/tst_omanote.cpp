@@ -324,6 +324,8 @@ private slots:
 
         QVERIFY(backend.isNotePath(dir.filePath(QStringLiteral("x.md"))));
         QVERIFY(!backend.isNotePath(QStringLiteral("/tmp/elsewhere.md")));
+        QVERIFY(backend.isNotePath(dir.filePath(QStringLiteral("Work/x.md"))));
+        QVERIFY(!backend.isNotePath(dir.path() + QStringLiteral("-other/x.md")));
 
         const QString path = dir.filePath(QStringLiteral("note.md"));
         { QFile f(path); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("# Hi\n"); }

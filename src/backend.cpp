@@ -266,8 +266,9 @@ void Backend::openPath(const QString &path) {
 bool Backend::isNotePath(const QString &path) const {
     if (m_notesDir.isEmpty() || path.isEmpty())
         return false;
+    // Notes live in the root or any subfolder of the notes directory.
     const QString dir = QFileInfo(path).absolutePath();
-    return dir == m_notesDir;
+    return dir == m_notesDir || dir.startsWith(m_notesDir + QLatin1Char('/'));
 }
 
 bool Backend::autosaveActive() const {
